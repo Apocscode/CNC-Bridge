@@ -2312,25 +2312,58 @@ def build_library() -> List[ReferenceEntry]:
             source="ETSU Crusader II Manual (Chapters 1 & 14)",
         ),
         ReferenceEntry(
-            code="COMPAT CRUSADER II CABLE", title="Crusader II — RS232 Cable Wiring",
+            code="COMPAT CRUSADER II CABLE", title="Crusader II / M — Custom RS232 Cable Build",
             category=EntryCategory.COMPATIBILITY,
-            description="RS232 cable wiring for PC-to-Crusader II communication.\n\n"
-                        "The Crusader II uses a DB-25 connector. A null-modem style cable is "
-                        "required between the PC COM port and the controller.\n\n"
-                        "Pin connections (PC DB-9 to Anilam DB-25):\n"
-                        "• PC pin 2 (RD) → Anilam pin 2 (TD)\n"
-                        "• PC pin 3 (TD) → Anilam pin 3 (RD)\n"
-                        "• PC pin 5 (SG) → Anilam pin 7 (SG)\n"
-                        "• PC pin 7 (RTS) → PC pin 8 (CTS) — loop back on PC side\n"
-                        "• Anilam pin 20 (DTR) → Anilam pin 6 (DSR) — loop back on Anilam side\n\n"
-                        "Same wiring scheme as the Crusader M DB-25 cable.",
-            when_to_use="When building or verifying a serial cable for Crusader II communication.",
-            warning="Always verify pin assignments against your specific controller revision. "
-                    "Some early units may have different pinouts.",
-            related=["COMPAT CRUSADER II RS232", "AUX 2740"],
-            tags=["Crusader II", "cable", "wiring", "RS-232", "DB-25", "DB-9", "null modem",
-                  "serial", "pinout", "connector"],
-            source="ETSU Crusader II Manual (Chapter 14, Figure 14-1)",
+            description="⚠ STANDARD RS232 CABLES WILL NOT WORK ⚠\n\n"
+                        "Anilam Crusader controllers (both M and II) require a CUSTOM-BUILT "
+                        "null-modem cable with handshake pins looped back on the MACHINE side. "
+                        "Off-the-shelf null modem cables cross handshake signals between devices, "
+                        "which the Anilam controller does not support.\n\n"
+                        "═══ DB-25 (Machine) to DB-9 (PC) ═══\n\n"
+                        "DATA LINES (straight by pin number — signals cross because DB-25 "
+                        "and DB-9 have different pin assignments):\n"
+                        "• Machine pin 2 → PC pin 2  (Machine TxD → PC RxD)\n"
+                        "• Machine pin 3 → PC pin 3  (Machine RxD → PC TxD)\n\n"
+                        "GROUND:\n"
+                        "• Machine pin 7 → PC pin 5  (Signal Ground)\n"
+                        "• Machine pin 1 (Shield) → Not Connected\n\n"
+                        "MACHINE-SIDE LOOPBACK (critical — bridge ALL 5 pins together):\n"
+                        "• Machine pins 4, 5, 6, 8, 20 — ALL bridged together\n"
+                        "  (RTS, CTS, DSR, DCD, DTR — self-satisfies handshake)\n\n"
+                        "PC SIDE: No handshake pins connected.\n\n"
+                        "═══ DB-25 (Machine) to DB-25 (PC) ═══\n\n"
+                        "• Machine pin 2 → PC pin 3  (TxD → RxD)\n"
+                        "• Machine pin 3 → PC pin 2  (RxD → TxD)\n"
+                        "• Machine pin 7 → PC pin 7  (Signal Ground)\n"
+                        "• Machine pins 4, 5, 6, 8, 20 — ALL bridged together\n\n"
+                        "═══ WHY STANDARD CABLES FAIL ═══\n\n"
+                        "Standard null-modem cables cross RTS↔CTS and DTR↔DSR between "
+                        "devices. The Anilam controller expects these signals looped back "
+                        "to itself on its own connector. Without the 5-pin bridge on the "
+                        "machine side, the controller will not communicate — you may see "
+                        "'RS232 READ' on the display but no data transfers.\n\n"
+                        "USB-to-Serial adapters (FTDI, Prolific, CH340) and devices like "
+                        "the DNC TITAN work fine — the custom cable wiring is the same "
+                        "regardless of whether the PC side is a native COM port or USB adapter.",
+            syntax="Cable Bill of Materials:\n"
+                   "• 1× DB-25 male connector (machine side)\n"
+                   "• 1× DB-9 female connector (PC side) — or DB-25 female if using native port\n"
+                   "• Shielded multi-conductor cable (5+ conductors)\n"
+                   "• Solder or crimp pins\n"
+                   "• Connector hoods/shells",
+            example="Loopback test: Set AUX 2740, install loopback plug "
+                    "(bridge pins 2-3, 4-5, 6-20 on DB-25), run diagnostics → AUX 0 = pass.",
+            when_to_use="When building or verifying a serial cable for Crusader M or Crusader II communication. "
+                        "This is the FIRST thing to check when RS232 transfers fail.",
+            warning="A standard null-modem cable WILL NOT WORK. You must build a custom cable with the "
+                    "5-pin handshake loopback on the machine side. Many forum posts report failed "
+                    "communications because of incorrect cables — this is the #1 cause of RS232 issues "
+                    "with Anilam controllers.",
+            related=["COMPAT CRUSADER II RS232", "COMPAT CRUSADER M RS232", "AUX 2740"],
+            tags=["Crusader II", "Crusader M", "cable", "wiring", "RS-232", "DB-25", "DB-9",
+                  "null modem", "custom", "build", "loopback", "handshake", "serial", "pinout",
+                  "connector", "USB", "FTDI", "adapter", "TITAN"],
+            source="Verified working pinout (Practical Machinist / ETSU Crusader II Manual Chapter 14)",
         ),
         ReferenceEntry(
             code="COMPAT CRUSADER II UPLOAD", title="Crusader II — Program Upload Procedure",

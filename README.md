@@ -241,6 +241,36 @@ list         — List SD card programs
 
 ---
 
+## ⚠ RS232 Cable — Custom Build Required
+
+**Standard RS232 / null-modem cables WILL NOT WORK** with Anilam Crusader controllers. You must build a custom cable with handshake pins looped back on the machine side.
+
+### DB-25 (Machine) → DB-9 (PC / USB Adapter)
+
+| Machine DB-25 | Direction | PC DB-9 | Signal |
+|---|---|---|---|
+| Pin 2 | → | Pin 2 | Machine TxD → PC RxD |
+| Pin 3 | → | Pin 3 | Machine RxD → PC TxD |
+| Pin 7 | → | Pin 5 | Signal Ground |
+| **Pins 4, 5, 6, 8, 20** | **Bridge all together** | — | **Handshake loopback** |
+
+### DB-25 (Machine) → DB-25 (PC)
+
+| Machine DB-25 | Direction | PC DB-25 | Signal |
+|---|---|---|---|
+| Pin 2 | → | Pin 3 | TxD → RxD |
+| Pin 3 | → | Pin 2 | RxD → TxD |
+| Pin 7 | → | Pin 7 | Signal Ground |
+| **Pins 4, 5, 6, 8, 20** | **Bridge all together** | — | **Handshake loopback** |
+
+### Why Standard Cables Fail
+
+Standard null-modem cables cross RTS↔CTS and DTR↔DSR **between** devices. The Anilam controller expects these signals looped back **to itself** on its own connector. Without the 5-pin bridge (RTS, CTS, DSR, DCD, DTR) on the machine side, the controller will show "RS232 READ" but no data will transfer.
+
+USB-to-Serial adapters (FTDI, Prolific, CH340) and devices like the DNC TITAN work fine — the custom cable wiring applies regardless of the PC-side interface.
+
+---
+
 ## License
 
 This project is provided for personal/educational use for interfacing with Anilam Crusader M CNC controllers.
