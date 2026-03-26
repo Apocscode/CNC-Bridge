@@ -5,6 +5,29 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 1. **Fusion 360 Post Processor** — Generates Anilam-dialect G-code directly from CAM toolpaths
 2. **Desktop Bridge Application** — Python/PyQt6 app for RS232 serial communication, DNC transfer, and monitoring
 3. **ESP32 Hardware Bridge** — Standalone firmware for WiFi-enabled DNC transfer and OLED status display
+4. **Reference Library** — 221 searchable entries + 18 scanned document PDFs (472 pages) with embedded viewer
+
+---
+
+## Downloads
+
+| Component | Download | Description |
+|-----------|----------|-------------|
+| **Desktop App** | [📥 bridge-app/](bridge-app/) | Python/PyQt6 dashboard — serial manager, DNC sender, reference library |
+| **Post Processor** | [📥 anilam-crusader-m.cps](post-processor/anilam-crusader-m.cps) | Fusion 360 post processor for Anilam Crusader M |
+| **ESP32 Firmware** | [📥 firmware/](firmware/) | PlatformIO project for ESP32-S3 hardware bridge |
+| **Session Log** | [📋 SESSION_LOG.md](SESSION_LOG.md) | Full development history and changelog |
+
+### Quick Download (Desktop App)
+```bash
+git clone https://github.com/Apocscode/CNC-Bridge.git
+cd CNC-Bridge/bridge-app
+pip install -r requirements.txt
+python -m src.main
+```
+
+### Quick Download (Post Processor Only)
+Right-click → Save As: [anilam-crusader-m.cps](https://raw.githubusercontent.com/Apocscode/CNC-Bridge/master/post-processor/anilam-crusader-m.cps)
 
 ---
 
@@ -25,9 +48,12 @@ CNC Bridge/
 │       ├── core/
 │       │   ├── serial_manager.py # RS232 serial communication
 │       │   ├── dnc_sender.py     # DNC drip-feed engine
-│       │   └── gcode_parser.py   # G-code parser & validator
+│       │   ├── gcode_parser.py   # G-code parser & validator
+│       │   └── reference_library.py # 221-entry searchable reference DB
 │       ├── ui/
-│       │   └── main_window.py    # PyQt6 monitoring dashboard
+│       │   ├── main_window.py    # PyQt6 monitoring dashboard
+│       │   ├── library_panel.py  # Searchable reference library UI
+│       │   └── pdf_viewer.py     # Embedded PDF page viewer
 │       └── utils/
 │
 ├── firmware/                     # ESP32-S3 firmware
@@ -40,6 +66,7 @@ CNC Bridge/
 │       ├── web_server.h          # WiFi web server header
 │       └── web_server.cpp        # REST API + web dashboard
 │
+├── SESSION_LOG.md                # Development history & changelog
 └── README.md
 ```
 
@@ -145,3 +172,9 @@ list         — List SD card programs
 ## License
 
 This project is provided for personal/educational use for interfacing with Anilam Crusader M CNC controllers.
+
+---
+
+## Session Log
+
+See [SESSION_LOG.md](SESSION_LOG.md) for the full development history, changelog, and current state summary.
