@@ -30,7 +30,15 @@ from ..core.serial_manager import (
 )
 from ..core.dnc_sender import DNCEngine, SendMode, TransferState, TransferProgress
 from ..core.gcode_parser import GCodeParser, GCodeValidator
+from ..core.settings import AppSettings, ConnectionProfile
+from ..core.traffic_logger import SerialTrafficLogger
+from ..core.backup_vault import ProgramBackupVault
+from ..core.update_checker import check_for_updates, UpdateInfo
 from .library_panel import LibraryPanel
+from .gcode_editor import GCodeEditorPanel
+from .backplotter import BackplotterPanel
+from .tool_library import ToolLibraryPanel
+from .file_diff import FileDiffPanel
 
 
 class StatusIndicator(QFrame):
@@ -64,14 +72,24 @@ class ConnectionPanel(QGroupBox):
     connect_requested = pyqtSignal(dict)
     disconnect_requested = pyqtSignal()
     refresh_ports = pyqtSignal()
+    profile_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__("Connection", parent)
+        self._profiles: list[ConnectionProfile] = []
         self._build_ui()
 
     def _build_ui(self):
         layout = QFormLayout()
         layout.setSpacing(4)
+
+        # Profile selection
+        profile_row = QHBoxLayout()
+        self.profile_combo = QComboBox()
+        self.profile_combo.setMinimumWidth(120)
+        self.profile_combo.currentTextChanged.connect(self._on_profile_change)
+        profile_row.addWidget(self.profile_combo)
+        layout.addRow("Profile:", profile_row)
 
         # Port selection
         port_row = QHBoxLayout()
@@ -173,6 +191,40 @@ class ConnectionPanel(QGroupBox):
         else:
             self.status_light.set_color("gray")
             self.status_label.setText("Disconnected")
+
+    def set_profiles(self, profiles: list):
+        """Load connection profiles into the profile combo."""
+        self._profiles = profiles
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        self.profile_combo.addItem("(Custom)")
+        for p in profiles:
+            self.profile_combo.addItem(p.name)
+        self.profile_combo.blockSignals(False)
+
+    def _on_profile_change(self, name: str):
+        """Apply selected profile settings."""
+        for p in self._profiles:
+            if p.name == name:
+                self.baud_combo.setCurrentText(str(p.baud_rate))
+                self.databits_combo.setCurrentText(str(p.data_bits))
+                self.parity_combo.setCurrentText(p.parity)
+                self.stopbits_combo.setCurrentText(str(p.stop_bits))
+                self.flow_combo.setCurrentText(p.flow_control)
+                self.profile_changed.emit(name)
+                break
+
+    def apply_settings(self, serial_settings):
+        """Apply saved serial settings to combos."""
+        if serial_settings.port:
+            idx = self.port_combo.findData(serial_settings.port)
+            if idx >= 0:
+                self.port_combo.setCurrentIndex(idx)
+        self.baud_combo.setCurrentText(str(serial_settings.baud_rate))
+        self.databits_combo.setCurrentText(str(serial_settings.data_bits))
+        self.parity_combo.setCurrentText(serial_settings.parity)
+        self.stopbits_combo.setCurrentText(str(serial_settings.stop_bits))
+        self.flow_combo.setCurrentText(serial_settings.flow_control)
 
 
 class MonitorPanel(QGroupBox):
@@ -587,11 +639,17 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CNC Bridge — Anilam Crusader M")
         self.setMinimumSize(1200, 800)
-        self.resize(1400, 900)
+
+        # Settings persistence
+        self.settings = AppSettings()
 
         # Core objects
         self.serial_mgr = SerialManager()
         self.dnc_engine = DNCEngine(self.serial_mgr)
+        self.traffic_logger = SerialTrafficLogger()
+        self.traffic_logger.enabled = self.settings.transfer.log_serial_traffic
+        self.backup_vault = ProgramBackupVault()
+        self.backup_vault.enabled = self.settings.transfer.auto_backup
 
         # Build UI
         self._build_menu()
@@ -599,11 +657,17 @@ class MainWindow(QMainWindow):
         self._setup_timers()
         self._connect_signals()
 
+        # Load saved settings
+        self._apply_saved_settings()
+
         # Initial port scan
         self._refresh_ports()
 
         # Apply dark theme
         self._apply_theme()
+
+        # Check for updates (background)
+        self._check_updates()
 
     def _build_menu(self):
         menubar = self.menuBar()
@@ -614,11 +678,29 @@ class MainWindow(QMainWindow):
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self._open_file)
         file_menu.addAction(open_action)
+
+        new_action = QAction("&New G-code", self)
+        new_action.setShortcut("Ctrl+N")
+        new_action.triggered.connect(self._new_editor)
+        file_menu.addAction(new_action)
+
+        save_action = QAction("&Save", self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.triggered.connect(self._save_editor)
+        file_menu.addAction(save_action)
+
         file_menu.addSeparator()
         exit_action = QAction("E&xit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        # Edit menu
+        edit_menu = menubar.addMenu("&Edit")
+        find_action = QAction("&Find / Replace", self)
+        find_action.setShortcut("Ctrl+F")
+        find_action.triggered.connect(self._toggle_find)
+        edit_menu.addAction(find_action)
 
         # Connection menu
         conn_menu = menubar.addMenu("&Connection")
@@ -643,12 +725,39 @@ class MainWindow(QMainWindow):
         receive_action.triggered.connect(self._receive_program)
         xfer_menu.addAction(receive_action)
 
+        # View menu
+        view_menu = menubar.addMenu("&View")
+        tabs_info = [
+            ("G-code &Viewer", 0), ("G-code &Editor", 1),
+            ("&Backplotter", 2), ("&Serial Terminal", 3),
+            ("&Tool Library", 4), ("File &Diff", 5),
+            ("Reference &Library", 6),
+        ]
+        for name, idx in tabs_info:
+            action = QAction(name, self)
+            action.triggered.connect(lambda checked, i=idx: self.tabs.setCurrentIndex(i))
+            view_menu.addAction(action)
+
+        # Tools menu
+        tools_menu = menubar.addMenu("Too&ls")
+        diff_action = QAction("Compare &Files...", self)
+        diff_action.triggered.connect(lambda: self.tabs.setCurrentIndex(5))
+        tools_menu.addAction(diff_action)
+
+        backplot_action = QAction("&Backplot Current File", self)
+        backplot_action.triggered.connect(self._backplot_current)
+        tools_menu.addAction(backplot_action)
+
         # Help menu
         help_menu = menubar.addMenu("&Help")
         library_action = QAction("Reference &Library", self)
         library_action.setShortcut("F1")
         library_action.triggered.connect(self._show_library)
         help_menu.addAction(library_action)
+        help_menu.addSeparator()
+        update_action = QAction("Check for &Updates", self)
+        update_action.triggered.connect(lambda: self._check_updates(manual=True))
+        help_menu.addAction(update_action)
         help_menu.addSeparator()
         about_action = QAction("&About CNC Bridge", self)
         about_action.triggered.connect(self._show_about)
@@ -682,8 +791,20 @@ class MainWindow(QMainWindow):
         self.gcode_viewer = GCodeViewerPanel()
         self.tabs.addTab(self.gcode_viewer, "G-code Viewer")
 
+        self.gcode_editor = GCodeEditorPanel()
+        self.tabs.addTab(self.gcode_editor, "G-code Editor")
+
+        self.backplotter = BackplotterPanel()
+        self.tabs.addTab(self.backplotter, "Backplotter")
+
         self.terminal = SerialTerminal()
         self.tabs.addTab(self.terminal, "Serial Terminal")
+
+        self.tool_library = ToolLibraryPanel(self.settings)
+        self.tabs.addTab(self.tool_library, "Tool Library")
+
+        self.file_diff = FileDiffPanel()
+        self.tabs.addTab(self.file_diff, "File Diff")
 
         self.library_panel = LibraryPanel()
         self.tabs.addTab(self.library_panel, "Reference Library")
@@ -744,6 +865,9 @@ class MainWindow(QMainWindow):
         self.dnc_engine.on_complete(self._on_transfer_complete)
         self.dnc_engine.on_error(self._on_transfer_error)
 
+        # Editor file-modified: auto-backplot
+        self.gcode_editor.file_modified.connect(self._on_editor_saved)
+
     # --- Actions ---
 
     def _refresh_ports(self):
@@ -760,11 +884,22 @@ class MainWindow(QMainWindow):
             self.conn_panel.set_connected(True)
             self.terminal.append_info(f"Connected to {config.port} at {config.baud_rate} baud")
             self.statusBar().showMessage(f"Connected: {config.port}")
+
+            # Start traffic logging
+            self.traffic_logger.start_session(config.port, config.baud_rate)
+            self.traffic_logger.log_event(f"Connected: {config.port} @ {config.baud_rate} baud")
+
+            # Save last-used serial settings
+            self.settings.serial.port = config.port
+            self.settings.serial.baud_rate = config.baud_rate
+            self.settings.save()
         else:
             QMessageBox.critical(self, "Connection Failed",
                                  f"Could not connect to {config.port}")
 
     def _disconnect(self):
+        self.traffic_logger.log_event("Disconnecting")
+        self.traffic_logger.stop_session()
         self.serial_mgr.disconnect()
         self.conn_panel.set_connected(False)
         self.terminal.append_info("Disconnected")
@@ -776,14 +911,29 @@ class MainWindow(QMainWindow):
             "G-code Files (*.txt *.nc *.ngc *.gcode *.tap);;All Files (*)"
         )
         if filepath:
-            self.gcode_viewer.load_file(filepath)
-            self.tabs.setCurrentWidget(self.gcode_viewer)
+            self.settings.add_recent_file(filepath)
+            current = self.tabs.currentWidget()
+            if current == self.gcode_editor:
+                self.gcode_editor.load_file(filepath)
+            elif current == self.backplotter:
+                self.backplotter.load_file(filepath)
+            else:
+                self.gcode_viewer.load_file(filepath)
+                self.tabs.setCurrentWidget(self.gcode_viewer)
 
     def _send_file(self, filepath: str, mode: str):
         if not self.serial_mgr.is_connected:
             QMessageBox.warning(self, "Not Connected",
                                 "Connect to a serial port first.")
             return
+
+        # Backup before sending
+        port = self.serial_mgr.config.port if self.serial_mgr.config else ""
+        self.backup_vault.backup_file(filepath, direction="sent", port=port)
+        self.traffic_logger.log_event(f"Sending file: {Path(filepath).name} ({mode})")
+
+        # Track recent files
+        self.settings.add_recent_file(filepath)
 
         send_mode = SendMode.DRIP_FEED if mode == "drip_feed" else SendMode.UPLOAD
         if self.dnc_engine.load_file(filepath):
@@ -815,6 +965,7 @@ class MainWindow(QMainWindow):
     def _send_terminal_command(self, command: str):
         if self.serial_mgr.is_connected:
             self.serial_mgr.send_line(command)
+            self.traffic_logger.log_tx(command)
         else:
             self.terminal.append_error("Not connected")
 
@@ -823,6 +974,7 @@ class MainWindow(QMainWindow):
     def _on_serial_line(self, line: str):
         # Thread-safe: use QTimer.singleShot to update GUI
         QTimer.singleShot(0, lambda: self.terminal.append_received(line))
+        self.traffic_logger.log_rx(line)
 
     def _on_connection_state(self, state: ConnectionState):
         QTimer.singleShot(0, lambda: self.monitor_panel.update_connection(state))
@@ -863,22 +1015,135 @@ class MainWindow(QMainWindow):
                 self.library_panel._search_box.setFocus()
                 break
 
+    # --- New Feature Methods ---
+
+    def _apply_saved_settings(self):
+        """Restore window/serial settings from last session."""
+        ws = self.settings.window
+        if ws.maximized:
+            self.showMaximized()
+        else:
+            self.resize(ws.width, ws.height)
+            self.move(ws.x, ws.y)
+
+        # Restore serial settings
+        self.conn_panel.apply_settings(self.settings.serial)
+
+        # Load profiles
+        self.conn_panel.set_profiles(self.settings.profiles)
+
+        # Restore last tab
+        if 0 <= ws.last_tab < self.tabs.count():
+            self.tabs.setCurrentIndex(ws.last_tab)
+
+    def _save_window_settings(self):
+        """Save current window state before closing."""
+        if self.isMaximized():
+            self.settings.window.maximized = True
+        else:
+            self.settings.window.maximized = False
+            geo = self.geometry()
+            self.settings.window.x = geo.x()
+            self.settings.window.y = geo.y()
+            self.settings.window.width = geo.width()
+            self.settings.window.height = geo.height()
+
+        self.settings.window.last_tab = self.tabs.currentIndex()
+
+        # Save serial combo state
+        self.settings.serial.baud_rate = int(self.conn_panel.baud_combo.currentText())
+        self.settings.serial.data_bits = int(self.conn_panel.databits_combo.currentText())
+        self.settings.serial.parity = self.conn_panel.parity_combo.currentText()
+        self.settings.serial.stop_bits = self.conn_panel.stopbits_combo.currentText()
+        self.settings.serial.flow_control = self.conn_panel.flow_combo.currentText()
+
+        port_data = self.conn_panel.port_combo.currentData()
+        if port_data:
+            self.settings.serial.port = port_data
+
+        self.settings.save()
+
+    def _check_updates(self, manual: bool = False):
+        """Check for updates in a background thread."""
+        import threading
+        def _check():
+            info = check_for_updates()
+            if info:
+                QTimer.singleShot(0, lambda: self._show_update_notification(info))
+            elif manual:
+                QTimer.singleShot(0, lambda: QMessageBox.information(
+                    self, "Up to Date", "You are running the latest version."))
+        threading.Thread(target=_check, daemon=True).start()
+
+    def _show_update_notification(self, info):
+        """Show update available dialog."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Available")
+        msg.setText(f"<b>CNC Bridge v{info.version}</b> is available!")
+        msg.setInformativeText(
+            f"Published: {info.published}\n\n"
+            f"{info.release_notes[:300]}..."
+            if len(info.release_notes) > 300 else info.release_notes
+        )
+        msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        if info.release_url:
+            msg.setDetailedText(f"Download: {info.release_url}")
+        msg.exec()
+
+    def _backplot_current(self):
+        """Backplot the file currently in the G-code viewer or editor."""
+        text = self.gcode_editor.get_text()
+        if not text:
+            text = self.gcode_viewer.get_text()
+        if text:
+            self.backplotter.load_text(text, "Current File")
+            self.tabs.setCurrentWidget(self.backplotter)
+        else:
+            QMessageBox.information(self, "No File",
+                                    "Open a G-code file in the Viewer or Editor first.")
+
+    def _on_editor_saved(self, filepath: str):
+        """When editor saves a file, update recent files."""
+        self.settings.add_recent_file(filepath)
+
+    def _new_editor(self):
+        """Create new file in editor."""
+        self.gcode_editor._new_file()
+        self.tabs.setCurrentWidget(self.gcode_editor)
+
+    def _save_editor(self):
+        """Save current editor file."""
+        self.gcode_editor._save_file()
+
+    def _toggle_find(self):
+        """Toggle find bar in editor."""
+        if self.tabs.currentWidget() == self.gcode_editor:
+            self.gcode_editor.toggle_find()
+        else:
+            self.tabs.setCurrentWidget(self.gcode_editor)
+            self.gcode_editor.toggle_find()
+
     # --- About ---
 
     def _show_about(self):
         QMessageBox.about(self, "About CNC Bridge",
-            "<h2>CNC Bridge</h2>"
-            "<p>Anilam Crusader M Communication Bridge</p>"
-            "<p>Version 1.0.0</p>"
+            "<h2>CNC Bridge v2.0</h2>"
+            "<p>Anilam Crusader M / II Communication Bridge</p>"
             "<p>Features:</p>"
             "<ul>"
             "<li>Fusion 360 Post Processor</li>"
+            "<li>G-code Editor with Syntax Highlighting</li>"
+            "<li>2D Toolpath Backplotter</li>"
             "<li>DNC Drip Feed & Upload</li>"
             "<li>G-code Validation</li>"
+            "<li>Tool Library Manager</li>"
+            "<li>File Diff Comparison</li>"
             "<li>Real-time Controller Monitoring</li>"
-            "<li>Serial Terminal</li>"
+            "<li>Serial Traffic Logging</li>"
+            "<li>Program Backup Vault</li>"
+            "<li>228-entry Reference Library</li>"
             "</ul>"
-            "<p>© 2026 CNC Bridge Project</p>"
+            "<p>© 2026 Apocscode — MIT License</p>"
         )
 
     # --- Theme ---
@@ -953,8 +1218,30 @@ class MainWindow(QMainWindow):
     # --- Cleanup ---
 
     def closeEvent(self, event):
+        # Save settings
+        self._save_window_settings()
+
+        # Stop traffic logging
+        self.traffic_logger.stop_session()
+
         if self.dnc_engine.is_active:
             self.dnc_engine.abort()
         if self.serial_mgr.is_connected:
             self.serial_mgr.disconnect()
+
+        # Check for unsaved editor changes
+        if self.gcode_editor.is_modified:
+            result = QMessageBox.question(
+                self, "Unsaved Changes",
+                "The editor has unsaved changes. Save before closing?",
+                QMessageBox.StandardButton.Save |
+                QMessageBox.StandardButton.Discard |
+                QMessageBox.StandardButton.Cancel,
+            )
+            if result == QMessageBox.StandardButton.Save:
+                self.gcode_editor._save_file()
+            elif result == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+
         event.accept()

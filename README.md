@@ -7,6 +7,18 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 3. **ESP32 Hardware Bridge** — Standalone firmware for WiFi-enabled DNC transfer and OLED status display
 4. **Reference Library** — 228 searchable entries + 18 scanned document PDFs (472 pages) with embedded viewer
 
+### v2.0 New Features
+- **G-code Editor** with syntax highlighting, line numbers, find/replace
+- **2D Backplotter** — visual toolpath preview with pan, zoom, grid
+- **Tool Library Manager** — manage tools, generate T10xx table blocks
+- **File Diff Tool** — side-by-side G-code comparison with color-coded changes
+- **Connection Profiles** — save/load RS232 settings for different controllers
+- **Settings Persistence** — remembers window size, COM port, and preferences between sessions
+- **Serial Traffic Logger** — auto-logs all TX/RX data to timestamped files
+- **Program Backup Vault** — auto-archives every program sent/received
+- **Auto-Update Checker** — checks GitHub Releases for new versions on startup
+- **58 Unit Tests** with GitHub Actions CI
+
 ---
 
 ## Dashboard Screenshots
@@ -132,9 +144,17 @@ CNC Bridge/
 │       │   ├── serial_manager.py # RS232 serial communication
 │       │   ├── dnc_sender.py     # DNC drip-feed engine
 │       │   ├── gcode_parser.py   # G-code parser & validator
-│       │   └── reference_library.py # 221-entry searchable reference DB
+│       │   ├── reference_library.py # 228-entry searchable reference DB
+│       │   ├── settings.py       # Settings persistence (JSON)
+│       │   ├── traffic_logger.py # Serial TX/RX traffic logger
+│       │   ├── backup_vault.py   # Program backup archive
+│       │   └── update_checker.py # GitHub release update checker
 │       ├── ui/
-│       │   ├── main_window.py    # PyQt6 monitoring dashboard
+│       │   ├── main_window.py    # PyQt6 monitoring dashboard (7 tabs)
+│       │   ├── gcode_editor.py   # G-code editor with syntax highlighting
+│       │   ├── backplotter.py    # 2D toolpath visualization
+│       │   ├── tool_library.py   # Tool database management
+│       │   ├── file_diff.py      # Side-by-side file comparison
 │       │   ├── library_panel.py  # Searchable reference library UI
 │       │   └── pdf_viewer.py     # Embedded PDF page viewer
 │       └── utils/
@@ -149,7 +169,26 @@ CNC Bridge/
 │       ├── web_server.h          # WiFi web server header
 │       └── web_server.cpp        # REST API + web dashboard
 │
-├── SESSION_LOG.md                # Development history & changelog
+├── tests/                        # Unit tests (pytest)
+│   ├── test_gcode_parser.py      # Parser & validator tests
+│   ├── test_core_modules.py      # Settings, logger, vault tests
+│   └── test_settings.py          # AppSettings persistence tests
+│
+├── docs/                         # Documentation
+│   ├── quickstart.md             # First-run walkthrough
+│   ├── troubleshooting.md        # Common issues & fixes
+│   ├── quick-reference-card.md   # Printable cheat sheet
+│   └── wiring/                   # SVG wiring diagrams
+│       ├── rs232-cable-pinout.svg
+│       └── esp32-s3-wiring.svg
+│
+├── installer/                    # Windows installer
+│   └── cnc-bridge.iss            # Inno Setup script
+│
+├── .github/workflows/ci.yml     # GitHub Actions CI
+├── CHANGELOG.md                  # Version history
+├── CONTRIBUTING.md               # Contribution guidelines
+├── SESSION_LOG.md                # Development history
 └── README.md
 ```
 
@@ -169,11 +208,20 @@ python -m src.main
 Or on Windows, just double-click `run.bat`.
 
 ### Features
-- **Connection Panel** — Select COM port, configure baud/parity/flow control (defaults to Anilam 9600/7E2/XON-XOFF)
+- **Connection Panel** — Select COM port, configure baud/parity/flow control, save/load connection profiles
 - **Monitor Panel** — Real-time transfer statistics, signal line status, flow control indicators
 - **Transfer Panel** — Upload/download G-code, DNC drip-feed with progress tracking
-- **Serial Terminal** — Raw send/receive for debugging
+- **Serial Terminal** — Raw send/receive for debugging (traffic auto-logged)
 - **G-Code Viewer** — Syntax-highlighted viewer with Anilam-specific validation
+- **G-Code Editor** — Full editor with syntax highlighting, line numbers, find/replace, undo/redo
+- **2D Backplotter** — Visual toolpath preview with rapid/feed/arc colors, pan, zoom, grid
+- **Tool Library** — Manage tools with diameter/length/flutes, generate T10xx table blocks
+- **File Diff** — Side-by-side G-code comparison with color-coded additions/deletions
+- **Reference Library** — 228 searchable entries covering G-codes, M-codes, AUX codes, canned cycles
+- **Serial Traffic Logger** — Auto-logs all sent/received data to timestamped session files
+- **Program Backup Vault** — Auto-archives every program with metadata manifest
+- **Settings Persistence** — Remembers window position, COM port, and all preferences
+- **Auto-Update Checker** — Checks GitHub Releases on startup for newer versions
 
 ---
 
