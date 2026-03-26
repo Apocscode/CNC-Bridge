@@ -290,9 +290,47 @@ USB-to-Serial adapters (FTDI, Prolific, CH340) and devices like the DNC TITAN wo
 
 ---
 
+## Disclaimer
+
+**This software is provided "as-is" without warranty of any kind.** It has NOT been tested on your specific machine, controller, or configuration. CNC machines can cause serious injury, death, and property damage if operated with incorrect programs or settings.
+
+**YOU ARE SOLELY RESPONSIBLE FOR:**
+- Verifying all G-code output before running it on your machine
+- Dry-running programs with the spindle off and feed hold ready
+- Confirming RS232 settings, cable wiring, and AUX codes match your specific controller revision
+- Understanding every line of code before executing it on your CNC
+
+The authors make **no guarantees, warranties, or representations of any kind** — express or implied — regarding the accuracy, reliability, safety, or suitability of this software for any purpose. The authors assume **no liability** for damage to machines, tooling, workpieces, or injury to persons resulting from the use of this software, post processor, cable wiring information, or any other content provided.
+
+The post processor output, cable pinouts, AUX codes, and all technical information are suggestions based on documentation research and one specific working setup (Supermax-30 / Crusader M). **Your machine may differ.** Always cross-reference with your own machine's documentation and test thoroughly before production use.
+
+**USE AT YOUR OWN RISK.**
+
+---
+
 ## License
 
-This project is provided for personal/educational use for interfacing with Anilam Crusader M CNC controllers.
+MIT License
+
+Copyright (c) 2026 Apocscode
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ---
 

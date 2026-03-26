@@ -1,0 +1,105 @@
+TITLE: Free Fusion 360 Post Processor & DNC Software for Anilam Crusader M / Crusader II
+
+----------------------------------------------------------------------
+
+Hey all,
+
+I've been running a Supermax-30 mill with an Anilam Crusader M controller and spent way too long fighting RS232 communications, building custom cables, and hand-editing G-code to get programs from Fusion 360 into the machine. I figured other people with these older Anilam controllers are dealing with the same headaches, so I'm sharing what I built.
+
+**CNC Bridge** is a free, open-source project that connects Fusion 360 directly to Anilam Crusader M and Crusader II controllers. It includes:
+
+
+1. FUSION 360 POST PROCESSOR (.cps file)
+-----------------------------------------
+Generates proper Anilam RS-274-D G-code directly from your CAM toolpaths. Not the generic Autodesk "Anilam Conversational" post (that one outputs word-based commands like "Line", "Arc Cw" — your Crusader can't read that). This outputs real G0/G1/G2/G3 with:
+
+- G29 subroutine system (S/C/E tags)
+- T10xx tool table format (Anilam's native tool registration)
+- V-variable drilling cycles (V20-V24 for G81-G89)
+- M1000/M2000 look-ahead mode for contouring
+- Proper % delimiters for RS232 transfer
+- Controller selection property — switch between Crusader M and Crusader II defaults in Fusion 360's post dialog
+
+Just drop the .cps file into Fusion 360 (Manufacture → Post Process → Setup → Import) and select your controller model. It writes the correct AUX codes and RS232 settings right into the program header as comments so you can verify your controller is configured to match.
+
+
+2. DESKTOP DNC APPLICATION (Windows)
+-------------------------------------
+A standalone Windows app (no install needed — just extract and run) for serial communication:
+
+- Send/receive programs over RS232
+- DNC drip-feed for programs larger than controller memory
+- Built-in G-code viewer with syntax highlighting
+- Serial terminal for direct communication
+- Transfer monitoring (progress, line count, errors)
+- Reference library with 228 searchable entries covering every AUX code, G-code, M-code, and programming concept from the Anilam documentation
+- Embedded PDF viewer with 18 scanned Anilam documents (472 pages — programming manuals, wiring diagrams, specs)
+
+The standalone .exe is ~53 MB, runs on Windows 10/11, no Python or other dependencies needed.
+
+
+3. RS232 CUSTOM CABLE INFO
+---------------------------
+This is the one that cost me the most time — STANDARD RS232 CABLES DO NOT WORK with these controllers. You need a custom cable with the handshake pins looped back on the machine side.
+
+DB-25 Male (machine end) → DB-9 Female (PC/USB adapter end):
+- Machine pin 2 → PC pin 2 (TxD → RxD)
+- Machine pin 3 → PC pin 3 (RxD → TxD)
+- Machine pin 7 → PC pin 5 (Signal Ground)
+- Machine pins 4, 5, 6, 8, 20 — ALL bridged together (handshake loopback)
+- NO handshake wires going to the PC side
+
+The Anilam controller port is DB-25 Female, so your cable needs a DB-25 Male on the machine end. The reason standard null-modem cables fail is they cross RTS↔CTS and DTR↔DSR between devices. The Anilam expects those signals looped back to itself. Without the 5-pin bridge you'll see "RS232 READ" on the display but nothing actually transfers.
+
+USB-to-Serial adapters (FTDI, Prolific, CH340) work fine with this cable.
+
+
+COMPATIBLE CONTROLLERS
+-----------------------
+Both Crusader M and Crusader II use the same RS-274-D G-code dialect. The only differences are RS232 defaults:
+
+Crusader M:  4800 baud, 7-bit, Even parity, XON/XOFF (AUX 2787/2767/2772/2791)
+Crusader II: 2400 baud, 7-bit, No parity, No handshake (AUX 2786/2767/2770/2790)
+
+The post processor and desktop app handle both — just select your controller model.
+
+
+DOWNLOADS
+----------
+Everything is free on GitHub:
+https://github.com/Apocscode/CNC-Bridge
+
+Ready-to-use downloads (no source code needed):
+https://github.com/Apocscode/CNC-Bridge/releases/tag/v1.0
+
+- CNC-Bridge-Desktop-v1.0.zip (53 MB) — Standalone Windows app, extract & run
+- CNC-Bridge-PostProcessor-v1.0.zip (<1 MB) — Fusion 360 .cps file
+- Anilam-Crusader-M-Documentation.zip (63 MB) — 32 scanned Anilam PDFs (programming manuals, wiring diagrams, CRT specs, console schematics)
+- CNC-Bridge-Source-v1.0.zip (<1 MB) — Full source code if you want to modify anything
+
+The documentation ZIP alone might be worth the download — it's a complete collection of Crusader M manuals, wiring diagrams, and specs that took a while to track down.
+
+
+If anyone has a Crusader M or Crusader II and wants to try this out, I'm happy to help troubleshoot. If you've got a working setup with different cable wiring or AUX settings, I'd love to hear about it so I can update the docs.
+
+
+DISCLAIMER
+-----------
+This software is provided "as-is" for personal and educational use only. It has NOT been tested on your specific machine, controller, or configuration. CNC machines can cause serious injury, death, and property damage if operated with incorrect programs or settings.
+
+YOU ARE SOLELY RESPONSIBLE FOR:
+- Verifying all G-code output before running it on your machine
+- Dry-running programs with the spindle off and feed hold ready
+- Confirming RS232 settings, cable wiring, and AUX codes match your specific controller revision
+- Understanding every line of code before executing it on your CNC
+
+We make NO guarantees, warranties, or representations of any kind — express or implied — regarding the accuracy, reliability, safety, or suitability of this software for any purpose. We assume NO liability for damage to machines, tooling, workpieces, or injury to persons resulting from the use of this software, post processor, cable wiring information, or any other content provided.
+
+The post processor output, cable pinouts, AUX codes, and all technical information are suggestions based on documentation research and one specific working setup (Supermax-30 / Crusader M). Your machine may differ. Always cross-reference with your own machine's documentation and test thoroughly before production use.
+
+USE AT YOUR OWN RISK.
+
+----------------------------------------------------------------------
+
+SUGGESTED FORUM SECTION: CNC Machining
+TAGS: Anilam, Crusader M, Crusader II, Supermax, RS232, DNC, Fusion 360, post processor, G-code
