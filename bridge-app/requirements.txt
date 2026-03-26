@@ -1,0 +1,6 @@
+# CNC Bridge — Python Desktop Application
+# Dependencies
+
+pyserial>=3.5
+PyQt6>=6.5.0
+watchdog>=3.0.0
