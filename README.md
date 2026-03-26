@@ -11,14 +11,27 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 
 ## Downloads
 
-| Component | Download | Description |
-|-----------|----------|-------------|
-| **Desktop App** | [📥 bridge-app/](bridge-app/) | Python/PyQt6 dashboard — serial manager, DNC sender, reference library |
-| **Post Processor** | [📥 anilam-crusader-m.cps](post-processor/anilam-crusader-m.cps) | Fusion 360 post processor for Anilam Crusader M |
-| **ESP32 Firmware** | [📥 firmware/](firmware/) | PlatformIO project for ESP32-S3 hardware bridge |
-| **Session Log** | [📋 SESSION_LOG.md](SESSION_LOG.md) | Full development history and changelog |
+### Ready-to-Use Installers (v1.0)
 
-### Quick Download (Desktop App)
+| Download | Size | Description | Requirements |
+|----------|------|-------------|--------------|
+| [📥 **CNC-Bridge-Desktop-v1.0.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/CNC-Bridge-Desktop-v1.0.zip) | 53 MB | Standalone desktop app — just extract & run `CNC-Bridge.exe` | Windows 10/11 (no Python needed) |
+| [📥 **CNC-Bridge-PostProcessor-v1.0.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/CNC-Bridge-PostProcessor-v1.0.zip) | <1 MB | Fusion 360 post processor (`.cps` file) | Autodesk Fusion 360 |
+| [📥 **CNC-Bridge-Source-v1.0.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/CNC-Bridge-Source-v1.0.zip) | <1 MB | Full source code (all components) | Python 3.10+, PlatformIO |
+
+👉 **[All releases](https://github.com/Apocscode/CNC-Bridge/releases)**
+
+### Install Desktop App (no Python required)
+1. Download **CNC-Bridge-Desktop-v1.0.zip** above
+2. Extract to any folder
+3. Run `CNC-Bridge.exe`
+
+### Install Post Processor in Fusion 360
+1. Download **CNC-Bridge-PostProcessor-v1.0.zip** above
+2. Extract the `.cps` file
+3. In Fusion 360: **Manufacture → Post Process → Setup → Import** → select `anilam-crusader-m.cps`
+
+### Developer Install (from source)
 ```bash
 git clone https://github.com/Apocscode/CNC-Bridge.git
 cd CNC-Bridge/bridge-app
@@ -26,8 +39,13 @@ pip install -r requirements.txt
 python -m src.main
 ```
 
-### Quick Download (Post Processor Only)
-Right-click → Save As: [anilam-crusader-m.cps](https://raw.githubusercontent.com/Apocscode/CNC-Bridge/master/post-processor/anilam-crusader-m.cps)
+### Browse Source
+| Component | Link | Description |
+|-----------|------|-------------|
+| Desktop App | [bridge-app/](bridge-app/) | PyQt6 dashboard — serial manager, DNC sender, reference library |
+| Post Processor | [anilam-crusader-m.cps](post-processor/anilam-crusader-m.cps) | Fusion 360 post processor for Anilam Crusader M |
+| ESP32 Firmware | [firmware/](firmware/) | PlatformIO project for ESP32-S3 hardware bridge |
+| Session Log | [SESSION_LOG.md](SESSION_LOG.md) | Full development history and changelog |
 
 ---
 

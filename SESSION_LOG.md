@@ -121,6 +121,15 @@ Development history and changelog for the CNC Bridge project.
 - Initial commit: 27 files, 8,208 lines
 - Published to GitHub: **https://github.com/Apocscode/CNC-Bridge** (public)
 
+### Release v1.0
+- Built standalone Windows `.exe` with PyInstaller (no Python needed on target)
+- Created 3 distributable ZIP packages:
+  - `CNC-Bridge-Desktop-v1.0.zip` (53 MB) — standalone app, extract & run
+  - `CNC-Bridge-PostProcessor-v1.0.zip` (<1 MB) — Fusion 360 `.cps` file
+  - `CNC-Bridge-Source-v1.0.zip` (<1 MB) — full source code
+- Published GitHub Release v1.0 with all ZIPs as downloadable assets
+- Updated README with direct download links to release assets
+
 ---
 
 ## Current State Summary
