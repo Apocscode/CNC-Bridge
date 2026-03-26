@@ -29,6 +29,14 @@ Desktop.ini
 # PlatformIO build output
 firmware/.pio/
 
+# PyInstaller build output
+bridge-app/build/
+bridge-app/dist/
+bridge-app/*.spec
+
+# Release ZIPs (built locally)
+releases/
+
 # Logs
 *.log
 
