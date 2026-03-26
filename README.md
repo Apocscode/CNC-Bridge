@@ -17,6 +17,7 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 |----------|------|-------------|--------------|
 | [📥 **CNC-Bridge-Desktop-v1.0.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/CNC-Bridge-Desktop-v1.0.zip) | 53 MB | Standalone desktop app — just extract & run `CNC-Bridge.exe` | Windows 10/11 (no Python needed) |
 | [📥 **CNC-Bridge-PostProcessor-v1.0.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/CNC-Bridge-PostProcessor-v1.0.zip) | <1 MB | Fusion 360 post processor (`.cps` file) | Autodesk Fusion 360 |
+| [📥 **Anilam-Crusader-M-Documentation.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/Anilam-Crusader-M-Documentation.zip) | 63 MB | Complete Anilam Crusader M documentation library (32 files — manuals, wiring diagrams, specs, CRT guides) | Any PDF viewer |
 | [📥 **CNC-Bridge-Source-v1.0.zip**](https://github.com/Apocscode/CNC-Bridge/releases/download/v1.0/CNC-Bridge-Source-v1.0.zip) | <1 MB | Full source code (all components) | Python 3.10+, PlatformIO |
 
 👉 **[All releases](https://github.com/Apocscode/CNC-Bridge/releases)**
@@ -46,6 +47,36 @@ python -m src.main
 | Post Processor | [anilam-crusader-m.cps](post-processor/anilam-crusader-m.cps) | Fusion 360 post processor for Anilam Crusader M |
 | ESP32 Firmware | [firmware/](firmware/) | PlatformIO project for ESP32-S3 hardware bridge |
 | Session Log | [SESSION_LOG.md](SESSION_LOG.md) | Full development history and changelog |
+
+### Anilam Documentation Library Contents
+The **Anilam-Crusader-M-Documentation.zip** contains 32 deduplicated files (PDFs, diagrams, specs):
+
+| Document | Pages | Content |
+|----------|-------|---------|
+| Crusader M 3X Programming Manual (70000135) | 220 | Complete programming reference |
+| Supermax YCM-16VS Machine Manual | 50 | Mill mechanical manual — spindle, gibs, lubrication, electrical |
+| Computron CRT Data | 31 | CRT monitor data sheets and specs |
+| Console Wiring Diagrams | 26 | Full console wiring schematics |
+| RS-232 Manual (Crusader II) | 24 | Serial communication manual |
+| G-Code & RS-232 Format Spec | 22 | G-code format and RS-232 protocol specification |
+| Advanced Programming | 22 | Advanced programming techniques |
+| Quantum Scale Installation (70000036) | 17 | Linear scale/encoder installation |
+| M-Functions Reference (70000169) | 11 | M-code function reference |
+| AUX Codes (scanned) | 8 | Scanned AUX code pages |
+| DNC Communication Guide | 2 | DNC setup and transfer |
+| CRT Alignment | 2 | CRT display alignment procedures |
+| Servo Drive Wiring Diagrams (×2) | 1 ea. | Wiring diagrams for servo drives |
+| Servo Diagrams PC801 | 3 | PC801-style servo board diagrams |
+| Westamp Drive Card Adjustment (mill + lathe) | — | Signal adjustment for Westamp drives |
+| Balance M/G | — | Servo balance procedures |
+| Parts Lists (×3) | — | Crusader II/M/G parts catalogs |
+| CRT References (Audiotronics, Computron, New) | — | CRT monitor technical references |
+| Heads/Encoders/Ballscrews | — | Mechanical component reference |
+| Servo Turn-On Procedure | — | Initial servo startup |
+| Rapid Speed Programming (70000249) | — | How to program rapid speed |
+| D-A Dipswitches (image) | — | DIP switch settings photo |
+| Anilam Series M UPE config | — | Controller configuration file |
+| Bushing Bore | — | Bushing bore reference |
 
 ---
 
