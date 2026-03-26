@@ -9,6 +9,19 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 
 ---
 
+## Dashboard Screenshots
+
+### G-code Viewer
+![G-code Viewer](docs/images/dashboard-gcode-viewer.png)
+
+### Serial Terminal
+![Serial Terminal](docs/images/dashboard-serial-terminal.png)
+
+### Reference Library
+![Reference Library](docs/images/dashboard-reference-library.png)
+
+---
+
 ## Compatible Controllers
 
 The post processor and desktop app support both Anilam Crusader controller variants:
