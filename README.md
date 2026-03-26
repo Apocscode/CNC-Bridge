@@ -5,7 +5,28 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 1. **Fusion 360 Post Processor** — Generates Anilam-dialect G-code directly from CAM toolpaths
 2. **Desktop Bridge Application** — Python/PyQt6 app for RS232 serial communication, DNC transfer, and monitoring
 3. **ESP32 Hardware Bridge** — Standalone firmware for WiFi-enabled DNC transfer and OLED status display
-4. **Reference Library** — 221 searchable entries + 18 scanned document PDFs (472 pages) with embedded viewer
+4. **Reference Library** — 228 searchable entries + 18 scanned document PDFs (472 pages) with embedded viewer
+
+---
+
+## Compatible Controllers
+
+The post processor and desktop app support both Anilam Crusader controller variants:
+
+| Feature | Crusader M (default) | Crusader II |
+|---|---|---|
+| **Display** | CRT / LCD | LED |
+| **Baud Rate** | 4800 (AUX 2787) | 2400 (AUX 2786) |
+| **Parity** | Even (AUX 2772) | None (AUX 2770) |
+| **Handshake** | XON/XOFF (AUX 2791) | None (AUX 2790) |
+| **Data Bits** | 7 (AUX 2767) | 7 (AUX 2767) |
+| **Program Memory** | Multiple programs | Single program |
+| **G-code Dialect** | RS-274-D | RS-274-D (identical) |
+| **G29 Subroutines** | Yes | Yes |
+| **M1000/M2000** | Yes | Yes |
+| **Canned Cycles** | G81–G89, G75–G79 | G81–G89, G75–G79 |
+
+To select your controller in Fusion 360: set the `controllerModel` property to `crusader-m` or `crusader-ii`.
 
 ---
 
@@ -151,6 +172,7 @@ Or on Windows, just double-click `run.bat`.
 3. Click **Import** and select `post-processor/anilam-crusader-m.cps`
 
 ### Anilam-Specific Features
+- **Controller selection** — `controllerModel` property: `crusader-m` (default) or `crusader-ii`
 - G29 subroutine calls (S#/C#/E)
 - T10xx tool numbering with X(diameter)/Z(length) format
 - V-variable drilling cycles (V20–V24)
@@ -158,6 +180,7 @@ Or on Windows, just double-click `run.bat`.
 - Feed clamping to 500 IPM, RPM clamping to 10000
 - `%` program delimiters for DNC compatibility
 - Configurable arc format (IJ incremental or R)
+- Auto-generated RS232 setup comments matching selected controller
 
 ---
 

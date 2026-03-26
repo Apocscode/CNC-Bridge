@@ -515,6 +515,7 @@ class LibraryPanel(QWidget):
             EntryCategory.WIRING: "#bcaaa4",
             EntryCategory.PARTS: "#90a4ae",
             EntryCategory.DOCUMENTS: "#42a5f5",
+            EntryCategory.COMPATIBILITY: "#66bb6a",
             EntryCategory.GENERAL: "#8899aa",
         }
         return colors.get(cat, "#8899aa")

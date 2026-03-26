@@ -9,7 +9,15 @@
   Based on Anilam ISO post (Autodesk) with extensive Crusader M enhancements
   derived from the UPE post definition (MY72.89) and RS232/programming manuals.
 
-  Machine: Anilam Crusader M (3-axis milling)
+  Compatible Controllers:
+    - Anilam Crusader M  (default — 4800 baud, 7-bit, XON/XOFF)
+    - Anilam Crusader II (select via controllerModel property — 2400 baud, no parity, no handshake)
+  
+  Both controllers share the same RS-274-D G-code dialect including G29
+  subroutines, V-variables, M1000/M2000 look-ahead, and canned cycles.
+  The only differences are RS232 communication defaults.
+
+  Machine: Anilam Crusader M / Crusader II (3-axis milling)
   Controller: Anilam Crusader II / M series
   Communication: RS232 serial (DNC drip feed supported)
   
@@ -24,9 +32,10 @@ legal = "Copyright (C) 2026 CNC Bridge Project";
 certificationLevel = 2;
 minimumRevision = 24000;
 
-longDescription = "Enhanced post processor for Anilam Crusader M (Crusader II series) CNC milling controllers. " +
+longDescription = "Enhanced post processor for Anilam Crusader M and Crusader II CNC milling controllers. " +
   "Supports G29 subroutine calls, T10xx tool table format, Anilam-specific drilling cycles " +
   "with V-variables, M1000/M2000 look-ahead mode, and DNC-friendly output. " +
+  "Select controller model in properties to auto-configure RS232 defaults. " +
   "Designed for use with the CNC Bridge serial communication system.";
 
 extension = "txt";
@@ -46,7 +55,42 @@ allowedCircularPlanes = (1 << PLANE_XY) | (1 << PLANE_ZX) | (1 << PLANE_YZ);
 // ============================================================================
 // User-Configurable Properties
 // ============================================================================
+// ============================================================================
+// Controller Model Profiles
+// ============================================================================
+var controllerProfiles = {
+  "crusader-m": {
+    name: "Anilam Crusader M",
+    baud: 4800,
+    dataBits: 7,
+    parity: "even",
+    handshake: "xon-xoff",
+    auxBaud: "AUX 2787",
+    auxBits: "AUX 2767",
+    auxParity: "AUX 2772",
+    auxHandshake: "AUX 2791",
+    auxReceive: "AUX 2701",
+    notes: "Default — Supermax-30 / Crusader M settings"
+  },
+  "crusader-ii": {
+    name: "Anilam Crusader II",
+    baud: 2400,
+    dataBits: 7,
+    parity: "none",
+    handshake: "none",
+    auxBaud: "AUX 2786",
+    auxBits: "AUX 2767",
+    auxParity: "AUX 2770",
+    auxHandshake: "AUX 2790",
+    auxReceive: "AUX 2701",
+    notes: "Bridgeport Crusader II — older LED display controllers"
+  }
+};
+
 properties = {
+  // --- Controller Model ---
+  controllerModel: "crusader-m",  // "crusader-m" or "crusader-ii"
+  
   // --- Output Formatting ---
   showSequenceNumbers: true,
   sequenceNumberStart: 0,
@@ -362,6 +406,9 @@ function onOpen() {
     writeln("%");
   }
 
+  // Resolve controller profile
+  var profile = controllerProfiles[properties.controllerModel] || controllerProfiles["crusader-m"];
+
   // Program comments
   if (properties.writeComments) {
     if (properties.writeProgramName && programName) {
@@ -370,7 +417,10 @@ function onOpen() {
     if (programComment) {
       writeComment(programComment);
     }
-    writeComment("FORMAT: Anilam Crusader M - CNC Bridge Post");
+    writeComment("FORMAT: " + profile.name + " - CNC Bridge Post");
+    writeComment("CONTROLLER: " + profile.name);
+    writeComment("RS232: " + profile.baud + " baud, " + profile.dataBits + "-bit, " + profile.parity + " parity, " + profile.handshake + " handshake");
+    writeComment("AUX SETUP: " + profile.auxBaud + ", " + profile.auxBits + ", " + profile.auxParity + ", " + profile.auxHandshake + ", " + profile.auxReceive);
     if (properties.writeTimestamp) {
       var d = new Date();
       writeComment(d.toLocaleDateString() + " AT " + d.toLocaleTimeString());
@@ -1147,8 +1197,9 @@ function onClose() {
 
   // File statistics
   if (properties.writeFileStats && properties.writeComments) {
-    // Note: fileFeet/fileMeters not available in all Fusion versions
+    var endProfile = controllerProfiles[properties.controllerModel] || controllerProfiles["crusader-m"];
     writeComment("CNC Bridge Post Processor - Program Complete");
+    writeComment("Controller: " + endProfile.name + " (" + endProfile.baud + " baud)");
   }
 
   // End of record

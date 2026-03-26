@@ -50,6 +50,7 @@ class EntryCategory(Enum):
     WIRING = "Wiring & Hardware"
     PARTS = "Service Parts"
     DOCUMENTS = "Scanned Documents"
+    COMPATIBILITY = "Controller Compatibility"
     GENERAL = "General Reference"
 
 
@@ -2157,6 +2158,207 @@ def build_library() -> List[ReferenceEntry]:
             source="ijohnsen.com/Supermax_YCM-16VS_Manual.pdf",
             pdf_file="Supermax_YCM-16VS_Manual.pdf",
             pdf_pages=50,
+        ),
+    ])
+
+    # ═══════════════════════════════════════════════════════════
+    # CONTROLLER COMPATIBILITY — Crusader II / Crusader M
+    # ═══════════════════════════════════════════════════════════
+    entries.extend([
+        ReferenceEntry(
+            code="COMPAT OVERVIEW", title="Crusader II / Crusader M Compatibility",
+            category=EntryCategory.COMPATIBILITY,
+            description="The Anilam Crusader II (introduced 1979) and Crusader M share the same RS-274-D "
+                        "G-code dialect. The CNC Bridge post processor generates code compatible with both controllers.\n\n"
+                        "Identical features across both controllers:\n"
+                        "• G00/G01 rapid & linear motion\n"
+                        "• G02/G03 circular interpolation (XY, XZ, YZ planes)\n"
+                        "• G29 subroutine system (S/C/D/E/LV)\n"
+                        "• G40/G41/G42 cutter compensation\n"
+                        "• G70/G71 inch/metric units\n"
+                        "• G80–G89 Z-axis canned cycles (G81/82/83/85/86/87/89)\n"
+                        "• G90/G91 absolute/incremental positioning\n"
+                        "• G53/G54 scaling activate/cancel\n"
+                        "• M1000/M2000 deceleration override (look-ahead)\n"
+                        "• V-variable system (V20–V24 for drilling)\n"
+                        "• DO loops (G29 D#)\n"
+                        "• Subroutines (G29 S#/C#/E)\n"
+                        "• % program delimiters\n"
+                        "• G75/G76/G77/G78/G79 XY canned cycles\n"
+                        "• G10–G13 polar moves\n\n"
+                        "The only differences are RS232 communication defaults (baud rate, parity, handshake).\n"
+                        "Select 'crusader-ii' in the post processor's controllerModel property for Crusader II.",
+            when_to_use="When setting up the post processor for a Crusader II controller instead of a Crusader M.",
+            related=["COMPAT CRUSADER II RS232", "COMPAT CRUSADER M RS232", "AUX 2701"],
+            tags=["compatibility", "Crusader II", "Crusader M", "controller", "version", "RS-274",
+                  "G-code", "post processor", "controllerModel"],
+            source="ETSU Crusader II Manual / Anilam Crusader M documentation",
+        ),
+        ReferenceEntry(
+            code="COMPAT CRUSADER II RS232", title="Crusader II — RS232 Default Settings",
+            category=EntryCategory.COMPATIBILITY,
+            description="Anilam Crusader II RS232 communication defaults:\n\n"
+                        "• Baud Rate: 2400 (AUX 2786)\n"
+                        "• Data Bits: 7 (AUX 2767) — same as Crusader M\n"
+                        "• Parity: None (AUX 2770)\n"
+                        "• Handshake: None (AUX 2790)\n"
+                        "• Receive RS-274: AUX 2701 — same as Crusader M\n"
+                        "• Send RS-274: AUX 2700 — same as Crusader M\n"
+                        "• Send Anilam format: AUX 2702 — same as Crusader M\n\n"
+                        "The Crusader II typically runs at a lower baud rate (2400) without "
+                        "parity or handshake. Cable runs should be kept short for reliable transfer.\n\n"
+                        "IMPORTANT: The Crusader II can only hold ONE program in active memory at a time.",
+            syntax="Controller setup sequence:\n"
+                   "AUX 2786 (2400 baud)\n"
+                   "AUX 2767 (7-bit)\n"
+                   "AUX 2770 (no parity)\n"
+                   "AUX 2790 (no handshake)\n"
+                   "AUX 2701 (receive RS-274)",
+            example="PC serial settings: 2400 baud, 7 data bits, No parity, 2 stop bits, No flow control",
+            when_to_use="When connecting CNC Bridge or a PC to an Anilam Crusader II controller. "
+                        "Set your serial port to match these parameters.",
+            warning="Without XON/XOFF handshake, the sender must pace data carefully to avoid "
+                    "overflowing the Crusader II's receive buffer. Use small character delays if needed. "
+                    "The Crusader II has limited memory — only one program at a time.",
+            related=["COMPAT CRUSADER M RS232", "COMPAT OVERVIEW", "AUX 2786", "AUX 2770", "AUX 2790"],
+            tags=["Crusader II", "RS-232", "serial", "baud", "2400", "no parity", "no handshake",
+                  "communication", "settings", "Bridgeport"],
+            source="ETSU Crusader II Manual (Chapter 14)",
+        ),
+        ReferenceEntry(
+            code="COMPAT CRUSADER M RS232", title="Crusader M — RS232 Default Settings (Supermax-30)",
+            category=EntryCategory.COMPATIBILITY,
+            description="Anilam Crusader M RS232 communication defaults (Supermax-30 configuration):\n\n"
+                        "• Baud Rate: 4800 (AUX 2787)\n"
+                        "• Character Set: ASCII (AUX 2758)\n"
+                        "• Data Bits: 7 (AUX 2767)\n"
+                        "• Parity: Even (AUX 2772)\n"
+                        "• Handshake: XON/XOFF (AUX 2791)\n"
+                        "• Receive RS-274: AUX 2701\n\n"
+                        "The Crusader M supports faster baud rates and XON/XOFF flow control, "
+                        "allowing reliable DNC drip-feed of large programs.",
+            syntax="Controller setup sequence:\n"
+                   "AUX 2758 (ASCII character set)\n"
+                   "AUX 2767 (7-bit)\n"
+                   "AUX 2772 (even parity)\n"
+                   "AUX 2787 (4800 baud)\n"
+                   "AUX 2791 (XON/XOFF handshake)\n"
+                   "AUX 2701 (receive RS-274)",
+            example="PC serial settings: 4800 baud, 7 data bits, Even parity, 2 stop bits, XON/XOFF",
+            when_to_use="Standard CNC Bridge configuration. These are the default settings in the desktop app.",
+            related=["COMPAT CRUSADER II RS232", "COMPAT OVERVIEW",
+                     "AUX 2787", "AUX 2767", "AUX 2772", "AUX 2791", "AUX 2758"],
+            tags=["Crusader M", "RS-232", "serial", "baud", "4800", "even parity", "XON/XOFF",
+                  "communication", "settings", "Supermax", "supermax-30", "default"],
+            source="Anilam Crusader M documentation",
+        ),
+        ReferenceEntry(
+            code="COMPAT POST PROCESSOR", title="Post Processor — Controller Selection",
+            category=EntryCategory.COMPATIBILITY,
+            description="The CNC Bridge post processor supports both Crusader M and Crusader II controllers "
+                        "via the 'controllerModel' property in Fusion 360.\n\n"
+                        "To select your controller:\n"
+                        "1. In Fusion 360: Manufacture → Post Process\n"
+                        "2. Click the 'Post Properties' section\n"
+                        "3. Set 'controllerModel' to:\n"
+                        "   • 'crusader-m' — Anilam Crusader M (default)\n"
+                        "   • 'crusader-ii' — Anilam Crusader II\n\n"
+                        "This changes the RS232 configuration comments in the G-code header. "
+                        "The G-code output itself is identical for both controllers — "
+                        "same G-codes, M-codes, G29 subroutines, V-variables, and canned cycles.\n\n"
+                        "The header comments will show the correct AUX codes to enter on the controller "
+                        "before receiving a program.",
+            when_to_use="When switching between Crusader II and Crusader M controllers, or when setting up "
+                        "the post processor for the first time.",
+            related=["COMPAT OVERVIEW", "COMPAT CRUSADER II RS232", "COMPAT CRUSADER M RS232"],
+            tags=["post processor", "Fusion 360", "controllerModel", "property", "selection",
+                  "configuration", "setup", "crusader-m", "crusader-ii"],
+            source="CNC Bridge post processor (anilam-crusader-m.cps)",
+        ),
+        ReferenceEntry(
+            code="COMPAT CRUSADER II FEATURES", title="Crusader II — Controller Features & Limits",
+            category=EntryCategory.COMPATIBILITY,
+            description="Anilam Crusader II controller capabilities (introduced 1979):\n\n"
+                        "Features:\n"
+                        "• LED display (not CRT/LCD like Crusader M)\n"
+                        "• 3-axis closed-loop servo control\n"
+                        "• EIA-274-D and conversational (Anilam format) programming\n"
+                        "• G90/G91 absolute and incremental positioning\n"
+                        "• Tool length offsets (TLOs) via numeric entry or digitizing\n"
+                        "• DO loops (up to 999 repetitions)\n"
+                        "• Subroutines (CALL) nested up to 32 levels deep\n"
+                        "• Subroutine rotation about origin\n"
+                        "• Linear interpolation in XY, XZ, YZ, and XYZ planes\n"
+                        "• Circular interpolation in XY, XZ, YZ planes\n"
+                        "• Helical interpolation (thread milling)\n"
+                        "• G53 part scaling (enlarge/reduce)\n"
+                        "• G71/G70 metric/inch units\n"
+                        "• G41/G42 cutter compensation\n"
+                        "• G75 frame milling, G76 hole milling\n"
+                        "• G77 circular pocket, G78 rectangular pocket\n"
+                        "• G79 bolt circle drilling\n"
+                        "• G81/82/83/85/86/87/89 Z-axis canned cycles\n\n"
+                        "Limits:\n"
+                        "• Single program memory only (one program at a time)\n"
+                        "• Axis travel: X=24.0\" Y=10.5\" Z=4.0\"\n"
+                        "• 2400 baud typical max reliable speed\n"
+                        "• No handshake flow control",
+            when_to_use="Reference when programming for a Crusader II to understand its capabilities and limits.",
+            warning="The Crusader II can only hold one program in memory at a time. "
+                    "Data transfer must be done frequently. Back up programs before loading new ones.",
+            related=["COMPAT OVERVIEW", "COMPAT CRUSADER II RS232"],
+            tags=["Crusader II", "features", "capabilities", "limits", "LED", "memory",
+                  "axis travel", "Bridgeport", "1979", "specifications"],
+            source="ETSU Crusader II Manual (Chapters 1 & 14)",
+        ),
+        ReferenceEntry(
+            code="COMPAT CRUSADER II CABLE", title="Crusader II — RS232 Cable Wiring",
+            category=EntryCategory.COMPATIBILITY,
+            description="RS232 cable wiring for PC-to-Crusader II communication.\n\n"
+                        "The Crusader II uses a DB-25 connector. A null-modem style cable is "
+                        "required between the PC COM port and the controller.\n\n"
+                        "Pin connections (PC DB-9 to Anilam DB-25):\n"
+                        "• PC pin 2 (RD) → Anilam pin 2 (TD)\n"
+                        "• PC pin 3 (TD) → Anilam pin 3 (RD)\n"
+                        "• PC pin 5 (SG) → Anilam pin 7 (SG)\n"
+                        "• PC pin 7 (RTS) → PC pin 8 (CTS) — loop back on PC side\n"
+                        "• Anilam pin 20 (DTR) → Anilam pin 6 (DSR) — loop back on Anilam side\n\n"
+                        "Same wiring scheme as the Crusader M DB-25 cable.",
+            when_to_use="When building or verifying a serial cable for Crusader II communication.",
+            warning="Always verify pin assignments against your specific controller revision. "
+                    "Some early units may have different pinouts.",
+            related=["COMPAT CRUSADER II RS232", "AUX 2740"],
+            tags=["Crusader II", "cable", "wiring", "RS-232", "DB-25", "DB-9", "null modem",
+                  "serial", "pinout", "connector"],
+            source="ETSU Crusader II Manual (Chapter 14, Figure 14-1)",
+        ),
+        ReferenceEntry(
+            code="COMPAT CRUSADER II UPLOAD", title="Crusader II — Program Upload Procedure",
+            category=EntryCategory.COMPATIBILITY,
+            description="Step-by-step procedure to transfer a program from PC to Crusader II controller:\n\n"
+                        "1. Press Emergency Stop on the controller\n"
+                        "2. Release E-Stop by rotating clockwise\n"
+                        "3. Press Manual button on console\n"
+                        "4. Load RS-232 communication protocols (AUX codes) if not already set:\n"
+                        "   • AUX 2786 (2400 baud)\n"
+                        "   • AUX 2770 (no parity)\n"
+                        "   • AUX 2790 (no handshake)\n"
+                        "5. On controller: AUX 2701 → Start (receive RS-274)\n"
+                        "   The controller's keypad will lock up while waiting\n"
+                        "6. On PC: Send the G-code file via CNC Bridge or:\n"
+                        "   COPY drive:\\path\\filename.ext COMx:\n"
+                        "7. If transfer succeeds, controller chirps once\n"
+                        "   If error, Error LED lights and error code appears in display\n\n"
+                        "NOTE: The program must have % delimiters and no comments between them. "
+                        "The CNC Bridge post processor handles this automatically.",
+            when_to_use="When transferring programs to a Crusader II for the first time, or as a reference "
+                        "for the correct upload sequence.",
+            warning="The controller keypad locks during receive mode. If the transfer hangs, "
+                    "you may need to power-cycle the controller.",
+            related=["COMPAT CRUSADER II RS232", "COMPAT OVERVIEW", "AUX 2701"],
+            tags=["Crusader II", "upload", "transfer", "procedure", "receive", "AUX 2701",
+                  "step by step", "program", "load"],
+            source="ETSU Crusader II Manual (Chapter 14)",
         ),
     ])
 
