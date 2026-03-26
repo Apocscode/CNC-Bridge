@@ -245,7 +245,13 @@ list         — List SD card programs
 
 **Standard RS232 / null-modem cables WILL NOT WORK** with Anilam Crusader controllers. You must build a custom cable with handshake pins looped back on the machine side.
 
-### DB-25 (Machine) → DB-9 (PC / USB Adapter)
+### Connector Gender
+
+- **Controller port (on Anilam machine):** DB-25 **Female**
+- **Cable machine end:** DB-25 **Male** (plugs into controller)
+- **Cable PC end:** DB-9 **Female** (plugs into COM port or USB-to-Serial adapter)
+
+### DB-25 Male (Machine End) → DB-9 Female (PC End)
 
 | Machine DB-25 | Direction | PC DB-9 | Signal |
 |---|---|---|---|
@@ -254,7 +260,7 @@ list         — List SD card programs
 | Pin 7 | → | Pin 5 | Signal Ground |
 | **Pins 4, 5, 6, 8, 20** | **Bridge all together** | — | **Handshake loopback** |
 
-### DB-25 (Machine) → DB-25 (PC)
+### DB-25 Male (Machine End) → DB-25 Female (PC)
 
 | Machine DB-25 | Direction | PC DB-25 | Signal |
 |---|---|---|---|
