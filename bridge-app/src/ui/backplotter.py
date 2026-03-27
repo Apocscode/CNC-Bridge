@@ -758,6 +758,7 @@ class BackplotterPanel(QGroupBox):
         self.speed_combo.setCurrentIndex(0)  # Default 100%
         self.speed_combo.setFixedWidth(65)
         self.speed_combo.setStyleSheet("QComboBox { background-color: #3c3c3c; color: #d4d4d4; padding: 2px; }")
+        self.speed_combo.currentIndexChanged.connect(self._on_speed_changed)
         anim_bar.addWidget(self.speed_combo)
         anim_bar.addSpacing(6)
 
@@ -912,6 +913,20 @@ class BackplotterPanel(QGroupBox):
 
     # ── Animation ─────────────────────────────────────────────
 
+    def _get_timer_interval(self) -> int:
+        """Calculate timer interval from speed combo. 100%=30ms, 5%=600ms."""
+        speed_text = self.speed_combo.currentText().replace("%", "")
+        try:
+            speed_pct = float(speed_text) / 100.0
+        except ValueError:
+            speed_pct = 1.0
+        speed_pct = max(0.01, speed_pct)
+        return int(30 / speed_pct)
+
+    def _on_speed_changed(self, _index):
+        """Update timer interval when speed combo changes mid-playback."""
+        self._anim_timer.setInterval(self._get_timer_interval())
+
     def _anim_play_pause(self):
         """Toggle play/pause for toolpath animation."""
         if not self.canvas._data or not self.canvas._data.moves:
@@ -928,6 +943,7 @@ class BackplotterPanel(QGroupBox):
                 self.canvas._anim_index = 0
             self._anim_playing = True
             self.play_btn.setText("⏸ Pause")
+            self._anim_timer.setInterval(self._get_timer_interval())
             self._anim_timer.start()
 
     def _anim_stop(self):
@@ -958,15 +974,8 @@ class BackplotterPanel(QGroupBox):
             self._anim_timer.stop()
             return
         total = len(self.canvas._data.moves)
-        # Speed percentage from combo box (100% = fastest, 5% = slowest)
-        speed_text = self.speed_combo.currentText().replace("%", "")
-        try:
-            speed_pct = float(speed_text) / 100.0
-        except ValueError:
-            speed_pct = 1.0
-        # Advance by scaled moves per tick depending on total moves
-        base_step = max(1, total // 300)
-        step = max(1, int(base_step * speed_pct))
+        # Step size scales with program length (1 move for small, more for large)
+        step = max(1, total // 300)
         self.canvas._anim_index = min(self.canvas._anim_index + step, total)
         self._update_anim_slider()
         self.canvas.update()
