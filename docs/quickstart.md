@@ -7,7 +7,7 @@ Get CNC Bridge running and send your first program to the Anilam Crusader M in 5
 ## Step 1: Install
 
 ### Option A: Standalone .exe (Recommended)
-1. Download `CNC-Bridge-Desktop-v2.0.zip` from [GitHub Releases](https://github.com/Apocscode/CNC-Bridge/releases)
+1. Download `CNC-Bridge-Desktop-v2.1.zip` from [GitHub Releases](https://github.com/Apocscode/CNC-Bridge/releases)
 2. Extract to any folder (e.g., `C:\CNC-Bridge`)
 3. Run `CNC-Bridge.exe`
 
@@ -82,10 +82,20 @@ You need a **custom RS232 cable** — standard cables will NOT work.
 ## Tips
 
 - **Always verify G-code** before sending — use the Validator and Backplotter
+- **Drag and drop** G-code files onto the window to load them instantly
+- **Use Connection → Test Connection** before your first transfer to verify cable and handshake
+- **Use Transfer → Send-Receive-Verify** to confirm transfer integrity (sends, receives back, compares)
+- **Inline validation** — click Validate in the Editor to see wavy underline markers on error lines
+- **Toolpath animation** — use Play/Pause/Step in the Backplotter to step through cuts
+- **Feed-rate heat map** — toggle Heat Map in the Backplotter to color toolpath by feed rate
+- **Export backplot** — save your toolpath as PNG or PDF for documentation
+- **Insert → Snippets** — 8 Anilam-specific G-code templates (header, footer, tool change, drilling, etc.)
 - **Use the Tool Library** (Tool Library tab) to manage your tools and generate T10xx table blocks
 - **Serial traffic is logged** automatically in `logs/serial/` — useful for debugging
+- **Error logs** are saved in `logs/cnc_bridge.log` and `logs/errors.log` (rotating file loggers)
 - **Programs are backed up** automatically in `backups/` — you'll never lose a program
 - **Settings are saved** between sessions — your COM port, baud rate, and window position are remembered
+- **Auto-reconnect** — if the serial connection drops, CNC Bridge retries every 5 seconds
 - Press **F1** to open the Reference Library — 228 searchable entries covering every code and setting
 - Press **Ctrl+F** in the Editor tab to find/replace text
 

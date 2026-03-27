@@ -132,48 +132,127 @@ Development history and changelog for the CNC Bridge project.
 
 ---
 
+## Session 4 — RS232 Cable Docs & Community
+**Date:** March 2026
+
+### Created
+- **RS232 custom cable documentation** — full pinout tables for DB-25→DB-9 and DB-25→DB-25, handshake loopback explanation, "why standard cables fail" section
+- **Dashboard screenshots** for README — G-code Viewer, Serial Terminal, Reference Library
+- **Practical Machinist forum post** (`docs/practical-machinist-post.txt`) — community introduction post with project overview
+
+### Updated
+- **README.md** — added disclaimer, comparison notes vs Autodesk Conversational post, MIT license section, cable wiring tables
+- **LICENSE** — MIT License file created
+
+---
+
+## Session 5 — v2.0 Feature Expansion
+**Date:** March 2026
+
+### Created (9 Software Features)
+- **G-code Editor** (`gcode_editor.py`) — Full editor with syntax highlighting, line numbers, current line highlight, find/replace (Ctrl+F), undo/redo
+- **2D Backplotter** (`backplotter.py`) — Visual toolpath preview with rapid/feed/arc/drill color coding, pan, zoom, grid overlay, coordinate display
+- **Tool Library Manager** (`tool_library.py`) — Persistent tool database, add/edit/delete, T10xx table generation, clipboard copy
+- **File Diff Tool** (`file_diff.py`) — Side-by-side G-code comparison with synchronized scrolling and color-coded diff highlighting
+- **Settings Persistence** (`settings.py`) — JSON-based settings for window geometry, serial config, last tab, recent files
+- **Connection Profiles** — Save/load named RS232 configurations, ships with Crusader M and Crusader II defaults
+- **Serial Traffic Logger** (`traffic_logger.py`) — Auto-logs all TX/RX data to timestamped session files in `logs/serial/`
+- **Program Backup Vault** (`backup_vault.py`) — Auto-archives every sent/received program with metadata manifest in `backups/`
+- **Auto-Update Checker** (`update_checker.py`) — Checks GitHub Releases API on startup, notifies when new version available
+
+### Created (6 Documentation Items)
+- **CHANGELOG.md** — Keep a Changelog format version history
+- **CONTRIBUTING.md** — Contribution guidelines
+- **docs/troubleshooting.md** — RS232 debugging guide
+- **docs/quickstart.md** — First-run walkthrough
+- **docs/quick-reference-card.md** — Printable cheat sheet
+- **docs/wiring/** — RS232 cable and ESP32 wiring diagrams (SVG)
+
+### Created (3 Engineering Items)
+- **tests/** — 58 unit tests (pytest) for GCodeParser, GCodeValidator, SerialConfig, AppSettings, TrafficLogger, BackupVault
+- **.github/workflows/ci.yml** — GitHub Actions CI (lint + test)
+- **installer/cnc-bridge.iss** — Inno Setup Windows installer script
+
+### Updated
+- **main_window.py** — Expanded from 5 tabs to 7 tabs, added Edit/View/Tools/Help menus
+- **README.md** — v2.0 feature section, updated project structure, updated feature list
+- Version bumped to 2.0 — committed as bb4192e
+
+---
+
+## Session 6 — v2.1 Advanced Features
+**Date:** March 2026
+
+### Created
+- **Connection Tester** (`connection_tester.py`) — 8-step COM port handshake/connectivity verification:
+  1. Port open test
+  2. Signal line check (DSR/CTS)
+  3. DTR toggle test
+  4. RTS toggle test
+  5. Buffer clear
+  6. XON send test
+  7. CR echo test
+  8. Data write verification
+  - `HandshakeReport` with `to_text()` formatter, `TestStep` dataclass with PASS/FAIL/WARN/SKIP results
+- **Error Logger** (`error_logger.py`) — Centralized rotating file log system:
+  - `logs/cnc_bridge.log` — RotatingFileHandler, 5MB × 5 backups, DEBUG level
+  - `logs/errors.log` — RotatingFileHandler, 2MB × 3 backups, ERROR only
+  - Console handler at INFO level
+  - `setup_logging()` and `get_logger(name)` helpers
+
+### Added (17 Features)
+- **Recent Files Menu** — File → Recent Files submenu, last 10 files, auto-updates
+- **Drag-and-Drop** — Drop `.nc`/`.tap`/`.gcode` files onto the window to load
+- **Audible Transfer Alerts** — `winsound.Beep` on transfer success (ascending) and error (3× warning)
+- **Send to Controller from Editor** — Green "▶ Send to Controller" button on Editor toolbar
+- **N-Line Renumber** — Edit → Renumber N-lines (strips existing, adds N10/N20/N30...)
+- **Inline Validation Markers** — Validate button applies colored wavy underlines (red=error, yellow=warning) with tooltips
+- **Estimated Cycle Time** — Yellow label in editor toolbar shows machining time and travel distance
+- **Auto-Reconnect** — 5-second retry timer on unexpected serial disconnect
+- **Feed-Rate Heat Map** — Backplotter checkbox colors toolpath by feed rate (blue→green→yellow→red gradient)
+- **Toolpath Animation** — Play/Pause/Step controls and scrubber slider with tool position crosshair cursor
+- **Export Backplot** — Save backplot as PNG image or PDF document (via QPdfWriter)
+- **G-code Snippet Templates** — Insert menu with 8 Anilam-specific templates (header, footer, tool change, G81 drill, G83 peck, subroutine, safe start, coolant)
+- **Connection Test / Handshake** — Connection → Test Connection runs 8-step diagnostic with colorized report
+- **Send-Receive-Verify** — Transfer → Send-Receive-Verify: sends file, receives back, compares character-by-character, loads diff on failure
+- **Error Logging System** — Rotating file loggers with console output
+- **Connection Tester Module** — `src/core/connection_tester.py`
+- **Error Logger Module** — `src/core/error_logger.py`
+
+### Updated
+- **main_window.py** — ~370 lines added: new menus (Insert, Connection→Test, Transfer→Send-Receive-Verify, Edit→Renumber), drag-drop handlers, auto-reconnect timer, connection tester integration, audible alerts, recent files, snippet insertion
+- **gcode_editor.py** — ~100 lines added: Validate button, Send to Controller button, inline ExtraSelections, cycle time label
+- **backplotter.py** — ~300 lines added: heat map toggle, animation controls bar (Play/Pause/Step/Slider), export PNG/PDF, `_feed_to_color()`, `render_to_image()`
+- **file_diff.py** — Added `_load_texts()` method for programmatic diff loading
+- **main.py** — Upgraded from `logging.basicConfig` to `setup_logging()` from error_logger
+- **update_checker.py** — Version bumped to 2.1.0
+- **CHANGELOG.md** — v2.1.0 section with 17 Added + 6 Changed items
+- **.gitignore** — Added `logs/`, `bridge-app/config/`, `bridge-app/backups/` exclusions
+- **About dialog** — Updated to v2.1 with full feature list
+
+### Screenshots Updated
+- Captured all 7 tabs + main dashboard screenshot (2576×1056 each)
+- New screenshots: `dashboard-gcode-editor.png`, `dashboard-backplotter.png`, `dashboard-tool-library.png`, `dashboard-file-diff.png`
+- Updated: `dashboard-gcode-viewer.png`, `dashboard-serial-terminal.png`, `dashboard-reference-library.png`, `dashboard-main.png`
+
+### Git
+- Committed as 317081b: "v2.1: +17 features"
+- Pushed to origin/master
+
+---
+
 ## Current State Summary
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| Post Processor | ✅ Complete | `anilam-crusader-m.cps` — Fusion 360 → Anilam RS-274 |
-| Desktop App | ✅ Complete | PyQt6 dashboard, serial manager, DNC sender, G-code parser |
-| Reference Library | ✅ Complete | 221 entries, 25 categories, full-text search |
-| PDF Viewer | ✅ Complete | 18 documents, 472 pages, zoom + drag-to-pan |
-| ESP32 Firmware | ✅ Complete | Serial bridge, web server, WiFi AP mode |
-| Git/GitHub | ✅ Complete | Apocscode/CNC-Bridge (public) |
-
-### File Inventory (27 tracked files)
-```
-.gitignore
-README.md
-SESSION_LOG.md
-bridge-app/requirements.txt
-bridge-app/run.bat
-bridge-app/extract_pdfs.py
-bridge-app/test_library.py
-bridge-app/src/__init__.py
-bridge-app/src/main.py
-bridge-app/src/core/__init__.py
-bridge-app/src/core/serial_manager.py
-bridge-app/src/core/dnc_sender.py
-bridge-app/src/core/gcode_parser.py
-bridge-app/src/core/reference_library.py
-bridge-app/src/ui/__init__.py
-bridge-app/src/ui/main_window.py
-bridge-app/src/ui/library_panel.py
-bridge-app/src/ui/pdf_viewer.py
-bridge-app/src/utils/__init__.py
-firmware/platformio.ini
-firmware/src/config.h
-firmware/src/main.cpp
-firmware/src/serial_bridge.cpp
-firmware/src/serial_bridge.h
-firmware/src/web_server.cpp
-firmware/src/web_server.h
-post-processor/anilam-crusader-m.cps
-post-processor/test-programs/test-pattern.nc
-```
+| Component | Status | Version | Details |
+|-----------|--------|---------|---------|
+| Post Processor | ✅ Complete | 1.0 | `anilam-crusader-m.cps` — Fusion 360 → Anilam RS-274 |
+| Desktop App | ✅ Complete | 2.1 | PyQt6 dashboard, 7 tabs, 17 new features in v2.1 |
+| Reference Library | ✅ Complete | — | 228 entries, 25 categories, full-text search |
+| PDF Viewer | ✅ Complete | — | 18 documents, 472 pages, zoom + drag-to-pan |
+| ESP32 Firmware | ✅ Complete | 1.0 | Serial bridge, web server, WiFi AP mode |
+| Connection Tester | ✅ Complete | 2.1 | 8-step handshake/diagnostic test |
+| Error Logging | ✅ Complete | 2.1 | Rotating file logs + console output |
+| Git/GitHub | ✅ Complete | — | Apocscode/CNC-Bridge (public) |
 
 ### Machine Configuration (Supermax-30 / Anilam Crusader M)
 | AUX Code | Setting | Value |

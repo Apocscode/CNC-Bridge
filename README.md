@@ -7,7 +7,24 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 3. **ESP32 Hardware Bridge** — Standalone firmware for WiFi-enabled DNC transfer and OLED status display
 4. **Reference Library** — 228 searchable entries + 18 scanned document PDFs (472 pages) with embedded viewer
 
-### v2.0 New Features
+### v2.1 New Features
+- **Connection Test / Handshake** — 8-step COM port diagnostic (signal lines, DTR/RTS toggle, XON, echo, data write)
+- **Error Logging System** — rotating file loggers (`logs/cnc_bridge.log` + `logs/errors.log`) with console output
+- **Feed-Rate Heat Map** — Backplotter colors toolpath by feed rate (blue→green→yellow→red)
+- **Toolpath Animation** — Play/Pause/Step controls with scrubber slider and tool position cursor
+- **Export Backplot** — save toolpath as PNG image or PDF document
+- **Drag-and-Drop** — drop `.nc`/`.tap`/`.gcode` files onto the window to load
+- **G-code Snippet Templates** — Insert menu with 8 Anilam-specific templates
+- **Auto-Reconnect** — automatically retries serial connection on disconnect
+- **Send-Receive-Verify** — sends file, receives back, compares for transfer integrity
+- **Inline Validation Markers** — wavy underline error/warning indicators in the editor
+- **N-Line Renumber** — strips existing N-numbers and adds N10/N20/N30... sequence
+- **Estimated Cycle Time** — shows machining time and travel distance in editor toolbar
+- **Recent Files Menu** — last 10 opened files in File → Recent Files
+- **Audible Transfer Alerts** — beep tones on transfer success/error
+- **Send to Controller from Editor** — green "▶ Send" button on Editor toolbar
+
+### v2.0 Features
 - **G-code Editor** with syntax highlighting, line numbers, find/replace
 - **2D Backplotter** — visual toolpath preview with pan, zoom, grid
 - **Tool Library Manager** — manage tools, generate T10xx table blocks
@@ -26,8 +43,20 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 ### G-code Viewer
 ![G-code Viewer](docs/images/dashboard-gcode-viewer.png)
 
+### G-code Editor
+![G-code Editor](docs/images/dashboard-gcode-editor.png)
+
+### 2D Backplotter
+![Backplotter](docs/images/dashboard-backplotter.png)
+
 ### Serial Terminal
 ![Serial Terminal](docs/images/dashboard-serial-terminal.png)
+
+### Tool Library
+![Tool Library](docs/images/dashboard-tool-library.png)
+
+### File Diff
+![File Diff](docs/images/dashboard-file-diff.png)
 
 ### Reference Library
 ![Reference Library](docs/images/dashboard-reference-library.png)
@@ -148,7 +177,9 @@ CNC Bridge/
 │       │   ├── settings.py       # Settings persistence (JSON)
 │       │   ├── traffic_logger.py # Serial TX/RX traffic logger
 │       │   ├── backup_vault.py   # Program backup archive
-│       │   └── update_checker.py # GitHub release update checker
+│       │   ├── update_checker.py # GitHub release update checker
+│       │   ├── connection_tester.py # 8-step COM port handshake test
+│       │   └── error_logger.py   # Rotating file log system
 │       ├── ui/
 │       │   ├── main_window.py    # PyQt6 monitoring dashboard (7 tabs)
 │       │   ├── gcode_editor.py   # G-code editor with syntax highlighting
@@ -213,15 +244,22 @@ Or on Windows, just double-click `run.bat`.
 - **Transfer Panel** — Upload/download G-code, DNC drip-feed with progress tracking
 - **Serial Terminal** — Raw send/receive for debugging (traffic auto-logged)
 - **G-Code Viewer** — Syntax-highlighted viewer with Anilam-specific validation
-- **G-Code Editor** — Full editor with syntax highlighting, line numbers, find/replace, undo/redo
-- **2D Backplotter** — Visual toolpath preview with rapid/feed/arc colors, pan, zoom, grid
+- **G-Code Editor** — Full editor with syntax highlighting, line numbers, find/replace, undo/redo, inline validation markers, cycle time estimate, send to controller
+- **2D Backplotter** — Visual toolpath preview with rapid/feed/arc colors, pan, zoom, grid, feed-rate heat map, toolpath animation (play/pause/step/scrub), export PNG/PDF
 - **Tool Library** — Manage tools with diameter/length/flutes, generate T10xx table blocks
 - **File Diff** — Side-by-side G-code comparison with color-coded additions/deletions
 - **Reference Library** — 228 searchable entries covering G-codes, M-codes, AUX codes, canned cycles
+- **Connection Test** — 8-step COM port handshake diagnostic (signal lines, DTR/RTS, XON, echo, data write)
+- **Send-Receive-Verify** — Round-trip transfer integrity check (send → receive → compare)
 - **Serial Traffic Logger** — Auto-logs all sent/received data to timestamped session files
 - **Program Backup Vault** — Auto-archives every program with metadata manifest
+- **Error Logging** — Rotating file logs (`cnc_bridge.log` + `errors.log`) with console output
 - **Settings Persistence** — Remembers window position, COM port, and all preferences
+- **Auto-Reconnect** — Retries serial connection every 5 seconds after unexpected disconnect
 - **Auto-Update Checker** — Checks GitHub Releases on startup for newer versions
+- **Drag-and-Drop** — Drop G-code files onto the window to load
+- **G-code Snippets** — Insert menu with 8 Anilam-specific templates
+- **Audible Alerts** — Beep tones on transfer success/error
 
 ---
 

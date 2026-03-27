@@ -140,9 +140,36 @@ Settings are stored in `bridge-app/config/settings.json`. Ensure the `config/` d
 
 ---
 
+## Connection Testing (v2.1)
+
+### Using the Connection Test
+Go to **Connection → Test Connection** to run an 8-step diagnostic:
+
+1. **Port Open** — Can the COM port be opened?
+2. **Signal Lines** — Are DSR and CTS asserted?
+3. **DTR Toggle** — Does toggling DTR work?
+4. **RTS Toggle** — Does toggling RTS work?
+5. **Buffer Clear** — Can buffers be flushed?
+6. **XON Send** — Can XON (0x11) be written?
+7. **CR Echo** — Does the controller echo a carriage return?
+8. **Data Write** — Can a test string be written?
+
+If steps 1–6 pass but 7–8 fail, your cable is correct but the controller isn't in RS232/DNC mode.
+
+### Send-Receive-Verify
+Go to **Transfer → Send-Receive-Verify** for a round-trip integrity check:
+1. Sends a file to the controller
+2. Receives the program back
+3. Compares character-by-character
+4. Opens the File Diff tab if mismatches are found
+
+---
+
 ## Getting Help
 
 1. Check the **Reference Library** (F1 key) — 228 searchable entries covering every G-code, M-code, AUX code, and RS232 setting.
-2. Check serial traffic logs in `logs/serial/` for raw TX/RX data.
-3. Post on [Practical Machinist](https://www.practicalmachinist.com/) in the CNC forum.
-4. Open a [GitHub Issue](https://github.com/Apocscode/CNC-Bridge/issues).
+2. Run **Connection → Test Connection** for an 8-step COM port diagnostic.
+3. Check serial traffic logs in `logs/serial/` for raw TX/RX data.
+4. Check error logs in `logs/cnc_bridge.log` and `logs/errors.log` for application-level issues.
+5. Post on [Practical Machinist](https://www.practicalmachinist.com/) in the CNC forum.
+6. Open a [GitHub Issue](https://github.com/Apocscode/CNC-Bridge/issues).
