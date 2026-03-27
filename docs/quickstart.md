@@ -7,7 +7,7 @@ Get CNC Bridge running and send your first program to the Anilam Crusader M in 5
 ## Step 1: Install
 
 ### Option A: Standalone .exe (Recommended)
-1. Download `CNC-Bridge-Desktop-v2.1.zip` from [GitHub Releases](https://github.com/Apocscode/CNC-Bridge/releases)
+1. Download `CNC-Bridge-Desktop-v3.0.zip` from [GitHub Releases](https://github.com/Apocscode/CNC-Bridge/releases)
 2. Extract to any folder (e.g., `C:\CNC-Bridge`)
 3. Run `CNC-Bridge.exe`
 
@@ -86,11 +86,20 @@ You need a **custom RS232 cable** — standard cables will NOT work.
 - **Use Connection → Test Connection** before your first transfer to verify cable and handshake
 - **Use Transfer → Send-Receive-Verify** to confirm transfer integrity (sends, receives back, compares)
 - **Inline validation** — click Validate in the Editor to see wavy underline markers on error lines
+- **Validation color-coding** — error lines are highlighted red and warnings yellow in the Viewer
 - **Toolpath animation** — use Play/Pause/Step in the Backplotter to step through cuts
+- **Playback speed** — use the Speed dropdown (100% / 75% / 50% / 25% / 10% / 5%) to slow down the animation
 - **Feed-rate heat map** — toggle Heat Map in the Backplotter to color toolpath by feed rate
 - **Export backplot** — save your toolpath as PNG or PDF for documentation
 - **Insert → Snippets** — 8 Anilam-specific G-code templates (header, footer, tool change, drilling, etc.)
 - **Use the Tool Library** (Tool Library tab) to manage your tools and generate T10xx table blocks
+- **Import from Code** — click "Import from Code" in the Tool Library to parse tools from a G-code file
+- **Save / Load Tool Libraries** — export and import tool sets as JSON files
+- **Macro Recorder** — record keystroke macros for repetitive edits (View → Macro Recorder)
+- **Program Library** — tag, search, and organize your saved programs
+- **Comment Translator** — auto-translate G-code comments between English, Spanish, and French
+- **Dark / Light Theme** — toggle between VS Code dark and light themes (View → Theme)
+- **Touch-Screen Mode** — enable enlarged buttons for shop-floor touchscreens (View → Touch Mode)
 - **Serial traffic is logged** automatically in `logs/serial/` — useful for debugging
 - **Error logs** are saved in `logs/cnc_bridge.log` and `logs/errors.log` (rotating file loggers)
 - **Programs are backed up** automatically in `backups/` — you'll never lose a program

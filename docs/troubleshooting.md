@@ -138,9 +138,57 @@ Also ensure your Anilam PDF files are in the configured directory (`F:\anilam\An
 
 Settings are stored in `bridge-app/config/settings.json`. Ensure the `config/` directory is writable. If running from a read-only location, copy the bridge-app folder to a writable directory.
 
+### "Theme Not Changing"
+
+If changing between dark and light theme doesn't take effect:
+1. Go to **View → Theme** and toggle the theme
+2. The theme change is applied immediately — no restart needed
+3. If the theme reverts on restart, check that `config/settings.json` is writable
+
+### "Tool Library Import from Code Finds No Tools"
+
+The Import from Code feature looks for two patterns:
+1. **Tool comments**: `( T1 — 0.500 4FL END MILL )` — requires a T-number followed by dash/em-dash and description
+2. **T10xx table blocks**: `T1001 X0.5000 Z3.2500` — standard Anilam tool table format
+
+If no tools are found:
+- Ensure your G-code uses standard Anilam tool comment format
+- Check that tool comments use `T` followed by a number
+- The Import dialog will report how many tools were parsed
+
+### "Tool Library Save/Load Not Working"
+
+- **Save to File** exports tools as a `.json` file — check that the target directory is writable
+- **Load from File** imports a previously saved `.json` file — you can choose Replace (clear existing) or Merge (add new)
+- If merge produces duplicates, tools are matched by tool number
+
+### "Backplotter Speed Control Has No Effect"
+
+- Speed control only affects animated playback (Play button), not static rendering
+- If the program is very short (<50 lines), speed differences may be subtle at higher speeds
+- Try 5% or 10% speed for clearly visible slow playback
+- Speed changes take effect immediately during active playback
+
+### "Macro Recorder Not Recording"
+
+- Macros record editor keystrokes only — they do not record mouse actions or menu clicks
+- Start recording before making edits, then stop when done
+- Saved macros persist in `config/macros.json`
+
 ---
 
-## Connection Testing (v2.1)
+## Theming & Display Issues
+
+### Touch-Screen Mode
+
+If controls are too small on your shop-floor touchscreen:
+1. Go to **View → Touch Mode** to enable enlarged buttons and controls
+2. Touch mode increases button size, spacing, and font size for easier touch interaction
+3. The setting persists between sessions
+
+---
+
+## Connection Testing (v2.1+)
 
 ### Using the Connection Test
 Go to **Connection → Test Connection** to run an 8-step diagnostic:

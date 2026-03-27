@@ -7,7 +7,20 @@ A complete communication bridge between **Autodesk Fusion 360** and the **Anilam
 3. **ESP32 Hardware Bridge** — Standalone firmware for WiFi-enabled DNC transfer and OLED status display
 4. **Reference Library** — 228 searchable entries + 18 scanned document PDFs (472 pages) with embedded viewer
 
-### v2.1 New Features
+### v3.0 New Features
+- **Macro Recorder** — record/play/edit keystroke macros for repetitive editing tasks
+- **Program Library** — tag, search, and organize saved G-code programs with metadata
+- **Comment Translator** — auto-translate G-code comments between English, Spanish, and French
+- **Dark / Light Theme** — VS Code-inspired dark theme (default) with one-click toggle to light
+- **Touch-Screen Mode** — enlarged buttons and controls for shop-floor touchscreen PCs
+- **Backplotter Speed Control** — adjustable playback speed (100% / 75% / 50% / 25% / 10% / 5%)
+- **Tool Library — Import from Code** — parse tool comments and T10xx tables from G-code files
+- **Tool Library — Save / Load** — export and import tool libraries as JSON files (replace or merge)
+- **File Diff — Preview on Load** — shows both files immediately when loaded, before running diff
+- **Validation Color-Coding** — G-code viewer highlights error lines red and warning lines yellow
+- **Validation Output Highlighting** — [ERROR] and [WARN] rows in the validation summary are color-coded
+
+### v2.1 Features
 - **Connection Test / Handshake** — 8-step COM port diagnostic (signal lines, DTR/RTS toggle, XON, echo, data write)
 - **Error Logging System** — rotating file loggers (`logs/cnc_bridge.log` + `logs/errors.log`) with console output
 - **Feed-Rate Heat Map** — Backplotter colors toolpath by feed rate (blue→green→yellow→red)
@@ -167,6 +180,10 @@ CNC Bridge/
 ├── bridge-app/                   # Python desktop application
 │   ├── requirements.txt
 │   ├── run.bat                   # Quick-start launcher
+│   ├── capture_screenshots.py    # Auto-capture dashboard screenshots
+│   ├── test_programs/            # Sample test G-code programs
+│   │   ├── test_part_v1.txt      # Rev A — 8 tools, 510 lines
+│   │   └── test_part_v2.txt      # Rev B — 9 tools, 552 lines
 │   └── src/
 │       ├── main.py               # App entry point
 │       ├── core/
@@ -179,13 +196,16 @@ CNC Bridge/
 │       │   ├── backup_vault.py   # Program backup archive
 │       │   ├── update_checker.py # GitHub release update checker
 │       │   ├── connection_tester.py # 8-step COM port handshake test
-│       │   └── error_logger.py   # Rotating file log system
+│       │   ├── error_logger.py   # Rotating file log system
+│       │   ├── macro_recorder.py # Keystroke macro recorder/player
+│       │   ├── program_library.py # G-code program organizer
+│       │   └── comment_translator.py # G-code comment translator
 │       ├── ui/
 │       │   ├── main_window.py    # PyQt6 monitoring dashboard (7 tabs)
 │       │   ├── gcode_editor.py   # G-code editor with syntax highlighting
-│       │   ├── backplotter.py    # 2D toolpath visualization
-│       │   ├── tool_library.py   # Tool database management
-│       │   ├── file_diff.py      # Side-by-side file comparison
+│       │   ├── backplotter.py    # 2D toolpath visualization + speed control
+│       │   ├── tool_library.py   # Tool database + import from code + save/load
+│       │   ├── file_diff.py      # Side-by-side file comparison + preview on load
 │       │   ├── library_panel.py  # Searchable reference library UI
 │       │   └── pdf_viewer.py     # Embedded PDF page viewer
 │       └── utils/
@@ -246,9 +266,15 @@ Or on Windows, just double-click `run.bat`.
 - **G-Code Viewer** — Syntax-highlighted viewer with Anilam-specific validation
 - **G-Code Editor** — Full editor with syntax highlighting, line numbers, find/replace, undo/redo, inline validation markers, cycle time estimate, send to controller
 - **2D Backplotter** — Visual toolpath preview with rapid/feed/arc colors, pan, zoom, grid, feed-rate heat map, toolpath animation (play/pause/step/scrub), export PNG/PDF
-- **Tool Library** — Manage tools with diameter/length/flutes, generate T10xx table blocks
-- **File Diff** — Side-by-side G-code comparison with color-coded additions/deletions
+- **Tool Library** — Manage tools with diameter/length/flutes, generate T10xx table blocks, import from G-code, save/load JSON files
+- **File Diff** — Side-by-side G-code comparison with color-coded additions/deletions, preview on load
 - **Reference Library** — 228 searchable entries covering G-codes, M-codes, AUX codes, canned cycles
+- **Macro Recorder** — Record, play, and edit keystroke macros for repetitive editing tasks
+- **Program Library** — Tag, search, and organize saved G-code programs with metadata
+- **Comment Translator** — Auto-translate G-code comments between English, Spanish, and French
+- **Dark / Light Theme** — VS Code-inspired dark theme with one-click toggle
+- **Touch-Screen Mode** — Enlarged buttons and controls for shop-floor touchscreen PCs
+- **Validation Color-Coding** — Error/warning highlighting in viewer and validation output
 - **Connection Test** — 8-step COM port handshake diagnostic (signal lines, DTR/RTS, XON, echo, data write)
 - **Send-Receive-Verify** — Round-trip transfer integrity check (send → receive → compare)
 - **Serial Traffic Logger** — Auto-logs all sent/received data to timestamped session files

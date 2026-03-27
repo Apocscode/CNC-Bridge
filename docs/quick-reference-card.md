@@ -132,6 +132,23 @@ Pins 4, 5, 6, 8, 20  → Jumper together on DB-25 side
 
 ---
 
+## v3.0 Features Quick Reference
+
+| Feature | Where | Description |
+|---------|-------|-------------|
+| Dark / Light Theme | View → Theme | Toggle between VS Code dark and light themes |
+| Touch-Screen Mode | View → Touch Mode | Enlarged controls for shop-floor touchscreens |
+| Macro Recorder | View → Macro Recorder | Record/play/edit keystroke macros |
+| Program Library | File → Program Library | Tag, search, organize saved programs |
+| Comment Translator | Tools → Translate Comments | Translate comments (EN/ES/FR) |
+| Import from Code | Tool Library tab | Parse tools from G-code comments & T10xx blocks |
+| Save/Load Tools | Tool Library tab | Export/import tool sets as JSON |
+| Speed Control | Backplotter tab | 100% / 75% / 50% / 25% / 10% / 5% playback |
+| Preview on Load | File Diff tab | Shows both files immediately when loaded |
+| Validation Colors | G-code Viewer tab | Errors red, warnings yellow in code & output |
+
+---
+
 ## Transfer Checklist
 
 - [ ] Cable connected (DB-25 ↔ DB-9 via USB-Serial adapter)
@@ -156,4 +173,4 @@ Pins 4, 5, 6, 8, 20  → Jumper together on DB-25 side
 
 ---
 
-*CNC Bridge v2.0 — © 2025 Apocscode — MIT License*
+*CNC Bridge v3.0 — © 2025 Apocscode — MIT License*
