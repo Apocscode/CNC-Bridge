@@ -7,11 +7,16 @@ PyQt6-based GUI providing:
   - DNC transfer controls (send, drip feed, pause, abort)
   - Real-time monitoring dashboard
   - Serial terminal / console
+  - Connection test / handshake verification
+  - Error logging with rotating files
+  - Recent files menu, drag-and-drop, audible alerts
 """
 
 import sys
 import os
 import time
+import winsound
+import logging
 from pathlib import Path
 from typing import Optional
 from PyQt6.QtWidgets import (
@@ -34,6 +39,7 @@ from ..core.settings import AppSettings, ConnectionProfile
 from ..core.traffic_logger import SerialTrafficLogger
 from ..core.backup_vault import ProgramBackupVault
 from ..core.update_checker import check_for_updates, UpdateInfo
+from ..core.connection_tester import ConnectionTester
 from .library_panel import LibraryPanel
 from .gcode_editor import GCodeEditorPanel
 from .backplotter import BackplotterPanel
@@ -567,9 +573,12 @@ class GCodeViewerPanel(QGroupBox):
         self.load_btn.clicked.connect(self._load_file)
         self.validate_btn = QPushButton("Validate")
         self.validate_btn.clicked.connect(self._validate)
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self._clear)
         self.stats_label = QLabel("")
         toolbar.addWidget(self.load_btn)
         toolbar.addWidget(self.validate_btn)
+        toolbar.addWidget(self.clear_btn)
         toolbar.addWidget(self.stats_label, 1)
         layout.addLayout(toolbar)
 
@@ -628,6 +637,14 @@ class GCodeViewerPanel(QGroupBox):
         summary = self.validator.get_summary()
         self.validation_output.setPlainText(summary)
 
+    def _clear(self):
+        """Clear the viewer display."""
+        self.code_view.clear()
+        self.validation_output.clear()
+        self._current_text = ""
+        self._current_file = ""
+        self.stats_label.setText("")
+
     def get_text(self) -> str:
         return self._current_text
 
@@ -656,6 +673,19 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._setup_timers()
         self._connect_signals()
+
+        # Enable drag and drop
+        self.setAcceptDrops(True)
+
+        # Connection tester
+        self.conn_tester = ConnectionTester(self.serial_mgr)
+
+        # Auto-reconnect state
+        self._auto_reconnect = True
+        self._reconnect_timer = QTimer()
+        self._reconnect_timer.setInterval(5000)
+        self._reconnect_timer.timeout.connect(self._attempt_reconnect)
+        self._last_config = None
 
         # Load saved settings
         self._apply_saved_settings()
@@ -690,6 +720,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction(save_action)
 
         file_menu.addSeparator()
+
+        # Recent files submenu
+        self.recent_menu = file_menu.addMenu("Recent &Files")
+        self._update_recent_menu()
+
+        file_menu.addSeparator()
         exit_action = QAction("E&xit", self)
         exit_action.setShortcut("Ctrl+Q")
         exit_action.triggered.connect(self.close)
@@ -701,6 +737,27 @@ class MainWindow(QMainWindow):
         find_action.setShortcut("Ctrl+F")
         find_action.triggered.connect(self._toggle_find)
         edit_menu.addAction(find_action)
+
+        renumber_action = QAction("&Renumber N-lines...", self)
+        renumber_action.triggered.connect(self._renumber_lines)
+        edit_menu.addAction(renumber_action)
+
+        # Insert menu (G-code snippet templates)
+        insert_menu = menubar.addMenu("&Insert")
+        snippets = [
+            ("Program &Header (Anilam)", "%\n(PROGRAM NAME)\n(DATE: )\n(TOOL: T1 - )\nG70 G90 G40 G80\n"),
+            ("Program &Footer", "M5\nM9\nG28\nM30\n%\n"),
+            ("Tool &Change Block", "M5\nM9\nT____ M6\n(TOOL: )\nG43 H__ Z1.0\nM3 S____\nM8\n"),
+            ("&Drill Cycle (G81)", "G81 X____ Y____ Z____ R0.1 F____\nG80\n"),
+            ("&Peck Drill (G83)", "G83 X____ Y____ Z____ R0.1 Q0.1 F____\nG80\n"),
+            ("&Subroutine Shell", "N9000 G29\n(SUBROUTINE)\n\nM2\n"),
+            ("Safe &Start Line", "G70 G90 G40 G80 G17\n"),
+            ("Coolant &On/Off", "M8 (FLOOD COOLANT ON)\n(... machining ...)\nM9 (COOLANT OFF)\n"),
+        ]
+        for name, code in snippets:
+            action = QAction(name, self)
+            action.triggered.connect(lambda checked, c=code: self._insert_snippet(c))
+            insert_menu.addAction(action)
 
         # Connection menu
         conn_menu = menubar.addMenu("&Connection")
@@ -715,6 +772,10 @@ class MainWindow(QMainWindow):
         refresh_action.triggered.connect(self._refresh_ports)
         conn_menu.addAction(refresh_action)
 
+        test_action = QAction("&Test Connection...", self)
+        test_action.triggered.connect(self._test_connection)
+        conn_menu.addAction(test_action)
+
         # Transfer menu
         xfer_menu = menubar.addMenu("&Transfer")
         send_action = QAction("&Send File...", self)
@@ -724,6 +785,11 @@ class MainWindow(QMainWindow):
         receive_action = QAction("&Receive from Controller", self)
         receive_action.triggered.connect(self._receive_program)
         xfer_menu.addAction(receive_action)
+
+        xfer_menu.addSeparator()
+        verify_action = QAction("Send-Receive-&Verify", self)
+        verify_action.triggered.connect(self._send_receive_verify)
+        xfer_menu.addAction(verify_action)
 
         # View menu
         view_menu = menubar.addMenu("&View")
@@ -868,6 +934,9 @@ class MainWindow(QMainWindow):
         # Editor file-modified: auto-backplot
         self.gcode_editor.file_modified.connect(self._on_editor_saved)
 
+        # Editor send-to-controller
+        self.gcode_editor.send_requested.connect(self._send_editor_text)
+
     # --- Actions ---
 
     def _refresh_ports(self):
@@ -881,6 +950,8 @@ class MainWindow(QMainWindow):
         if port_data:
             config.port = port_data
         if self.serial_mgr.connect(config):
+            self._last_config = config_dict  # Save for auto-reconnect
+            self._reconnect_timer.stop()
             self.conn_panel.set_connected(True)
             self.terminal.append_info(f"Connected to {config.port} at {config.baud_rate} baud")
             self.statusBar().showMessage(f"Connected: {config.port}")
@@ -912,6 +983,7 @@ class MainWindow(QMainWindow):
         )
         if filepath:
             self.settings.add_recent_file(filepath)
+            self._update_recent_menu()
             current = self.tabs.currentWidget()
             if current == self.gcode_editor:
                 self.gcode_editor.load_file(filepath)
@@ -939,6 +1011,20 @@ class MainWindow(QMainWindow):
         if self.dnc_engine.load_file(filepath):
             self.dnc_engine.send(send_mode)
             self.terminal.append_info(f"Sending {Path(filepath).name} ({mode})")
+
+    def _send_editor_text(self, text: str):
+        """Send the current editor content directly to the controller."""
+        if not self.serial_mgr.is_connected:
+            QMessageBox.warning(self, "Not Connected",
+                                "Connect to a serial port first.")
+            return
+
+        lines = text.splitlines()
+        name = Path(self.gcode_editor.filepath).name if self.gcode_editor.filepath else "Editor"
+        self.dnc_engine.load_lines(lines, name)
+        self.dnc_engine.send(SendMode.UPLOAD)
+        self.terminal.append_info(f"Sending from editor: {name} ({len(lines)} lines)")
+        self.tabs.setCurrentWidget(self.terminal)
 
     def _receive_program(self):
         if not self.serial_mgr.is_connected:
@@ -982,6 +1068,13 @@ class MainWindow(QMainWindow):
     def _on_serial_error(self, message: str):
         QTimer.singleShot(0, lambda: self.terminal.append_error(message))
         QTimer.singleShot(0, lambda: self.statusBar().showMessage(f"Error: {message}"))
+        logging.getLogger("CNCBridge").error(f"Serial error: {message}")
+        # Start auto-reconnect if enabled
+        if self._auto_reconnect and self._last_config and not self._reconnect_timer.isActive():
+            QTimer.singleShot(0, lambda: self.terminal.append_info(
+                "Auto-reconnect will attempt in 5 seconds..."
+            ))
+            self._reconnect_timer.start()
 
     def _on_flow_control(self, is_xon: bool):
         QTimer.singleShot(0, lambda: self.monitor_panel.update_flow(is_xon))
@@ -993,9 +1086,22 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, lambda: self.terminal.append_info(
             f"Transfer complete: {progress.current_line} lines in {progress.elapsed_time:.1f}s"
         ))
+        # Audible alert — success (two ascending beeps)
+        try:
+            winsound.Beep(800, 200)
+            winsound.Beep(1200, 300)
+        except Exception:
+            pass
 
     def _on_transfer_error(self, message: str):
         QTimer.singleShot(0, lambda: self.terminal.append_error(f"Transfer error: {message}"))
+        # Audible alert — error (three low beeps)
+        try:
+            for _ in range(3):
+                winsound.Beep(400, 250)
+                time.sleep(0.1)
+        except Exception:
+            pass
 
     # --- Periodic Monitor Update ---
 
@@ -1127,20 +1233,27 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         QMessageBox.about(self, "About CNC Bridge",
-            "<h2>CNC Bridge v2.0</h2>"
+            "<h2>CNC Bridge v2.1</h2>"
             "<p>Anilam Crusader M / II Communication Bridge</p>"
             "<p>Features:</p>"
             "<ul>"
             "<li>Fusion 360 Post Processor</li>"
             "<li>G-code Editor with Syntax Highlighting</li>"
-            "<li>2D Toolpath Backplotter</li>"
+            "<li>2D Toolpath Backplotter with Heat Map</li>"
+            "<li>Toolpath Animation (Play/Pause/Step)</li>"
             "<li>DNC Drip Feed & Upload</li>"
-            "<li>G-code Validation</li>"
+            "<li>Send-Receive-Verify Workflow</li>"
+            "<li>G-code Validation with Inline Markers</li>"
             "<li>Tool Library Manager</li>"
             "<li>File Diff Comparison</li>"
             "<li>Real-time Controller Monitoring</li>"
+            "<li>Connection Test / Handshake</li>"
+            "<li>Auto-Reconnect on Disconnect</li>"
             "<li>Serial Traffic Logging</li>"
             "<li>Program Backup Vault</li>"
+            "<li>Drag-and-Drop File Loading</li>"
+            "<li>G-code Snippet Templates</li>"
+            "<li>Backplot Export (PNG/PDF)</li>"
             "<li>228-entry Reference Library</li>"
             "</ul>"
             "<p>© 2026 Apocscode — MIT License</p>"
@@ -1215,11 +1328,290 @@ class MainWindow(QMainWindow):
             QFrame { background-color: transparent; }
         """)
 
+    # --- Recent Files ---
+
+    def _update_recent_menu(self):
+        """Rebuild the Recent Files submenu from settings."""
+        self.recent_menu.clear()
+        for filepath in self.settings.recent_files[:10]:
+            name = Path(filepath).name
+            action = QAction(name, self)
+            action.setToolTip(filepath)
+            action.triggered.connect(lambda checked, fp=filepath: self._open_recent(fp))
+            self.recent_menu.addAction(action)
+        if not self.settings.recent_files:
+            empty = QAction("(no recent files)", self)
+            empty.setEnabled(False)
+            self.recent_menu.addAction(empty)
+
+    def _open_recent(self, filepath: str):
+        """Open a file from the Recent Files menu."""
+        if not Path(filepath).exists():
+            QMessageBox.warning(self, "File Not Found",
+                                f"File no longer exists:\n{filepath}")
+            self.settings.recent_files = [
+                f for f in self.settings.recent_files if f != filepath
+            ]
+            self.settings.save()
+            self._update_recent_menu()
+            return
+        self.settings.add_recent_file(filepath)
+        self._update_recent_menu()
+        current = self.tabs.currentWidget()
+        if current == self.gcode_editor:
+            self.gcode_editor.load_file(filepath)
+        elif current == self.backplotter:
+            self.backplotter.load_file(filepath)
+        else:
+            self.gcode_viewer.load_file(filepath)
+            self.tabs.setCurrentWidget(self.gcode_viewer)
+
+    # --- Drag-and-Drop ---
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.toLocalFile().lower().endswith(
+                    ('.txt', '.nc', '.ngc', '.gcode', '.tap')
+                ):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            filepath = url.toLocalFile()
+            if filepath:
+                self.settings.add_recent_file(filepath)
+                self._update_recent_menu()
+                current = self.tabs.currentWidget()
+                if current == self.gcode_editor:
+                    self.gcode_editor.load_file(filepath)
+                elif current == self.backplotter:
+                    self.backplotter.load_file(filepath)
+                else:
+                    self.gcode_viewer.load_file(filepath)
+                    self.tabs.setCurrentWidget(self.gcode_viewer)
+                break  # Load first dropped file
+
+    # --- Connection Test ---
+
+    def _test_connection(self):
+        """Run connection handshake test sequence."""
+        if not self.serial_mgr.is_connected:
+            QMessageBox.warning(self, "Not Connected",
+                                "Connect to a serial port first.")
+            return
+
+        self.terminal.append_info("Running connection test...")
+        self.tabs.setCurrentWidget(self.terminal)
+
+        import threading
+        def run():
+            def on_progress(msg):
+                QTimer.singleShot(0, lambda: self.terminal.append_info(msg))
+
+            self.conn_tester.on_progress(on_progress)
+            report = self.conn_tester.run_test()
+
+            def show_result():
+                self.terminal.append_text("", "#d4d4d4")
+                for line in report.to_text().split("\n"):
+                    if "PASS" in line:
+                        self.terminal.append_text(line, "#4CAF50")
+                    elif "FAIL" in line:
+                        self.terminal.append_text(line, "#F44336")
+                    elif "WARN" in line:
+                        self.terminal.append_text(line, "#FFC107")
+                    else:
+                        self.terminal.append_text(line, "#d4d4d4")
+
+                if report.overall_pass:
+                    self.statusBar().showMessage("Connection test: PASSED")
+                    winsound.Beep(1000, 200)
+                else:
+                    self.statusBar().showMessage("Connection test: FAILED")
+                    winsound.Beep(400, 400)
+
+            QTimer.singleShot(0, show_result)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    # --- Auto-Reconnect ---
+
+    def _attempt_reconnect(self):
+        """Try to reconnect using the last known config."""
+        if self.serial_mgr.is_connected:
+            self._reconnect_timer.stop()
+            return
+        if not self._last_config:
+            self._reconnect_timer.stop()
+            return
+
+        self.terminal.append_info("Attempting auto-reconnect...")
+        config = SerialConfig.from_dict(self._last_config)
+        port_data = self.conn_panel.port_combo.currentData()
+        if port_data:
+            config.port = port_data
+
+        if self.serial_mgr.connect(config):
+            self._reconnect_timer.stop()
+            self.conn_panel.set_connected(True)
+            self.terminal.append_info(f"Reconnected to {config.port}")
+            self.statusBar().showMessage(f"Reconnected: {config.port}")
+            self.traffic_logger.start_session(config.port, config.baud_rate)
+            winsound.Beep(1000, 200)
+        else:
+            self.terminal.append_info("Reconnect failed, retrying in 5s...")
+
+    # --- Send-Receive-Verify ---
+
+    def _send_receive_verify(self):
+        """Send a file, receive it back, and compare for integrity."""
+        if not self.serial_mgr.is_connected:
+            QMessageBox.warning(self, "Not Connected",
+                                "Connect to a serial port first.")
+            return
+
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Select G-code to Send & Verify", "",
+            "G-code Files (*.txt *.nc *.ngc *.gcode *.tap);;All Files (*)"
+        )
+        if not filepath:
+            return
+
+        self.tabs.setCurrentWidget(self.terminal)
+        self.terminal.append_info(f"Send-Receive-Verify: {Path(filepath).name}")
+
+        import threading
+        def run():
+            try:
+                # Read original
+                with open(filepath, 'r', encoding='ascii', errors='replace') as f:
+                    original = f.read()
+
+                original_lines = [l.strip() for l in original.splitlines() if l.strip()]
+
+                # Send
+                QTimer.singleShot(0, lambda: self.terminal.append_info("Phase 1: Sending..."))
+                if not self.dnc_engine.load_file(filepath):
+                    QTimer.singleShot(0, lambda: self.terminal.append_error("Failed to load file"))
+                    return
+
+                self.dnc_engine.send(SendMode.UPLOAD)
+                # Wait for completion
+                while self.dnc_engine.is_active:
+                    time.sleep(0.2)
+
+                if self.dnc_engine.state != TransferState.COMPLETED:
+                    QTimer.singleShot(0, lambda: self.terminal.append_error("Send failed"))
+                    return
+
+                # Receive back
+                QTimer.singleShot(0, lambda: self.terminal.append_info("Phase 2: Receiving back..."))
+                received = self.dnc_engine.receive_program(timeout=30)
+                if not received:
+                    QTimer.singleShot(0, lambda: self.terminal.append_error(
+                        "No data received back — controller may not support read-back"
+                    ))
+                    return
+
+                received_clean = [l.strip() for l in received if l.strip()]
+
+                # Compare
+                QTimer.singleShot(0, lambda: self.terminal.append_info("Phase 3: Verifying..."))
+                match = original_lines == received_clean
+                diff_count = 0
+                for i, (orig, recv) in enumerate(zip(original_lines, received_clean)):
+                    if orig != recv:
+                        diff_count += 1
+                diff_count += abs(len(original_lines) - len(received_clean))
+
+                def show_result():
+                    if match:
+                        self.terminal.append_text(
+                            "✓ VERIFY PASSED — sent and received data match!", "#4CAF50")
+                        winsound.Beep(1000, 300)
+                    else:
+                        self.terminal.append_text(
+                            f"✗ VERIFY FAILED — {diff_count} line(s) differ", "#F44336")
+                        winsound.Beep(400, 500)
+                        # Load into diff viewer
+                        self.file_diff._load_texts(
+                            original, '\n'.join(received),
+                            "Sent", "Received"
+                        )
+
+                QTimer.singleShot(0, show_result)
+
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self.terminal.append_error(f"Verify error: {e}"))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    # --- Snippet Insertion ---
+
+    def _insert_snippet(self, code: str):
+        """Insert a G-code snippet at the editor cursor."""
+        self.tabs.setCurrentWidget(self.gcode_editor)
+        cursor = self.gcode_editor.editor.textCursor()
+        cursor.insertText(code)
+
+    # --- N-line Renumber ---
+
+    def _renumber_lines(self):
+        """Renumber or add N-line sequence numbers in the editor."""
+        if self.tabs.currentWidget() != self.gcode_editor:
+            self.tabs.setCurrentWidget(self.gcode_editor)
+
+        text = self.gcode_editor.get_text()
+        if not text.strip():
+            QMessageBox.information(self, "Empty", "No G-code to renumber.")
+            return
+
+        import re as re_mod
+        lines = text.splitlines()
+        new_lines = []
+        n = 10
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped == '%' or stripped.startswith('('):
+                new_lines.append(line)
+                continue
+            # Remove existing N number
+            cleaned = re_mod.sub(r'^N\d+\s*', '', stripped)
+            new_lines.append(f"N{n} {cleaned}")
+            n += 10
+
+        self.gcode_editor.editor.setPlainText('\n'.join(new_lines))
+        self.terminal.append_info(f"Renumbered {(n - 10) // 10} lines (N10, N20, ...)")
+
+    # --- Estimated Cycle Time ---
+
+    def _show_cycle_time(self, text: str):
+        """Parse G-code and display estimated cycle time in status bar."""
+        try:
+            validator = GCodeValidator()
+            issues, stats = validator.validate_text(text)
+            if stats.estimated_time_minutes > 0:
+                mins = int(stats.estimated_time_minutes)
+                secs = int((stats.estimated_time_minutes - mins) * 60)
+                dist = getattr(stats, 'total_distance_inches', 0)
+                msg = f"Est. cycle: {mins}m {secs}s"
+                if dist > 0:
+                    msg += f" | Travel: {dist:.1f}\""
+                self.statusBar().showMessage(msg, 10000)
+        except Exception:
+            pass
+
     # --- Cleanup ---
 
     def closeEvent(self, event):
         # Save settings
         self._save_window_settings()
+
+        # Stop auto-reconnect
+        self._reconnect_timer.stop()
 
         # Stop traffic logging
         self.traffic_logger.stop_session()

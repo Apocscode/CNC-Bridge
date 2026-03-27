@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = "2.0.0"
+CURRENT_VERSION = "2.1.0"
 GITHUB_REPO = "Apocscode/CNC-Bridge"
 RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 

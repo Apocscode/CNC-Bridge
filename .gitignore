@@ -39,6 +39,11 @@ releases/
 
 # Logs
 *.log
+logs/
+
+# User config / backups (generated at runtime)
+bridge-app/config/
+bridge-app/backups/
 
 # Byte-compiled
 *.pyc

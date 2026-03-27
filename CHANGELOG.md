@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [2.1.0] — 2026-03-26
+
+### Added
+- **Recent Files Menu** — File → Recent Files submenu shows last 10 opened files, auto-updates on open
+- **Drag-and-Drop** — Drop G-code files anywhere on the window to load them into the active tab
+- **Audible Transfer Alerts** — Success beeps on transfer complete, warning beeps on transfer error
+- **Send to Controller from Editor** — "▶ Send to Controller" button on Editor toolbar sends current buffer directly
+- **N-Line Renumber** — Edit → Renumber N-lines adds/renumbers N10, N20, N30... sequence numbers
+- **Inline Validation Markers** — Editor "Validate" button highlights error lines with colored wavy underlines
+- **Estimated Cycle Time** — Validation shows estimated machining time and travel distance in the editor toolbar
+- **Auto-Reconnect** — Automatically retries serial connection every 5 seconds after unexpected disconnect
+- **Feed-Rate Heat Map** — Backplotter checkbox colors toolpath by feed rate (blue=slow → red=fast)
+- **Toolpath Animation** — Play/Pause/Step controls and scrubber slider to animate toolpath drawing with tool position cursor
+- **Export Backplot** — Save backplot as PNG image or PDF document with full rendering
+- **G-code Snippet Templates** — Insert menu with 8 Anilam-specific templates (header, footer, tool change, drilling, etc.)
+- **Connection Test / Handshake** — Connection → Test Connection runs 8-step diagnostic: port check, signal lines, DTR/RTS toggle, buffer clear, XON send, CR echo, data write
+- **Send-Receive-Verify** — Transfer → Send-Receive-Verify sends a file, receives it back, compares for integrity with pass/fail report
+- **Error Logging System** — Rotating file loggers: `logs/cnc_bridge.log` (all events, 5MB×5) and `logs/errors.log` (errors only, 2MB×3) with console output
+- **Connection Tester Module** — New `src/core/connection_tester.py` with full test suite and formatted report
+- **Error Logger Module** — New `src/core/error_logger.py` with `setup_logging()` and `get_logger()`
+
+### Changed
+- Version bumped to 2.1.0
+- About dialog updated with all new features
+- Logging system upgraded from basic `logging.basicConfig` to rotating file handlers
+- Backplotter now has animation controls bar below toolbar
+- Editor toolbar expanded with Validate, Send to Controller, and cycle time display
+- Menu bar expanded with Insert menu and Edit → Renumber N-lines
+
+---
+
 ## [2.0.0] — 2026-03-26
 
 ### Added

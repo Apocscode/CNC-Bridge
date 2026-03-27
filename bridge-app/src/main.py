@@ -13,24 +13,15 @@ import sys
 import logging
 from pathlib import Path
 
-# Setup logging before imports
-LOG_DIR = Path(__file__).parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_DIR / "cnc_bridge.log"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+# Setup structured logging (rotating files + console)
+from .core.error_logger import setup_logging
+setup_logging(level=logging.DEBUG, console=True)
 logger = logging.getLogger("CNCBridge")
 
 
 def main():
     """Launch the CNC Bridge application."""
-    logger.info("Starting CNC Bridge v1.0.0")
+    logger.info("Starting CNC Bridge v2.1.0")
 
     try:
         from PyQt6.QtWidgets import QApplication
@@ -44,7 +35,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("CNC Bridge")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationVersion("2.1.0")
     app.setOrganizationName("CNC Bridge Project")
 
     # Default font

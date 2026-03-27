@@ -114,6 +114,10 @@ class FileDiffPanel(QGroupBox):
         self.swap_btn.clicked.connect(self._swap_files)
         toolbar.addWidget(self.swap_btn)
 
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self._clear)
+        toolbar.addWidget(self.clear_btn)
+
         toolbar.addStretch()
 
         self.stats_label = QLabel("")
@@ -220,6 +224,36 @@ class FileDiffPanel(QGroupBox):
         self.header_b.setText(nb)
         if self._text_a and self._text_b:
             self._run_diff()
+
+    def _clear(self):
+        """Clear both diff views and reset file state."""
+        self._file_a = ""
+        self._file_b = ""
+        self._text_a = ""
+        self._text_b = ""
+        self.label_a.setText("No file")
+        self.label_a.setStyleSheet("color: #888;")
+        self.label_b.setText("No file")
+        self.label_b.setStyleSheet("color: #888;")
+        self.header_a.setText("File A")
+        self.header_b.setText("File B")
+        self.diff_view_a.clear()
+        self.diff_view_b.clear()
+        self.stats_label.setText("")
+
+    def _load_texts(self, text_a: str, text_b: str, name_a: str = "A", name_b: str = "B"):
+        """Load two text strings directly and run diff (for programmatic use)."""
+        self._text_a = text_a
+        self._text_b = text_b
+        self._file_a = name_a
+        self._file_b = name_b
+        self.label_a.setText(name_a)
+        self.label_a.setStyleSheet("color: #d4d4d4;")
+        self.label_b.setText(name_b)
+        self.label_b.setStyleSheet("color: #d4d4d4;")
+        self.header_a.setText(name_a)
+        self.header_b.setText(name_b)
+        self._run_diff()
 
     def _run_diff(self):
         """Run the diff comparison."""

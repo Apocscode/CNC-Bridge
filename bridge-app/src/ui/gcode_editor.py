@@ -4,8 +4,10 @@ CNC Bridge — G-code Editor with Syntax Highlighting
 Full-featured G-code editor with:
   - Syntax highlighting (G/M codes, coordinates, comments, etc.)
   - Line numbers
-  - Inline validation markers
+  - Inline validation markers (squiggly underlines)
   - Find/Replace
+  - Send to Controller button
+  - Estimated cycle time display
   - Edit programs without leaving the app
 """
 
@@ -16,7 +18,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QMessageBox, QLineEdit,
     QGroupBox, QCheckBox, QFrame,
 )
-from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal, QTimer
 from PyQt6.QtGui import (
     QFont, QColor, QPainter, QTextFormat, QSyntaxHighlighter,
     QTextCharFormat, QTextDocument, QTextCursor, QPen,
@@ -230,11 +232,13 @@ class GCodeEditorPanel(QGroupBox):
     """G-code editor tab with toolbar, find/replace, and status."""
 
     file_modified = pyqtSignal(str)  # filepath
+    send_requested = pyqtSignal(str)  # text content to send
 
     def __init__(self, parent=None):
         super().__init__("G-code Editor", parent)
         self._filepath = ""
         self._is_modified = False
+        self._validation_lines = set()  # lines with errors
         self._build_ui()
 
     def _build_ui(self):
@@ -270,7 +274,27 @@ class GCodeEditorPanel(QGroupBox):
         self.redo_btn.clicked.connect(lambda: self.editor.redo())
         toolbar.addWidget(self.redo_btn)
 
+        toolbar.addSpacing(20)
+
+        self.validate_btn = QPushButton("Validate")
+        self.validate_btn.clicked.connect(self._validate_inline)
+        toolbar.addWidget(self.validate_btn)
+
+        self.send_btn = QPushButton("▶ Send to Controller")
+        self.send_btn.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 4px 10px; }"
+        )
+        self.send_btn.clicked.connect(self._on_send)
+        toolbar.addWidget(self.send_btn)
+
         toolbar.addStretch()
+
+        self.cycle_label = QLabel("")
+        self.cycle_label.setFont(QFont("Consolas", 9))
+        self.cycle_label.setStyleSheet("color: #FFC107;")
+        toolbar.addWidget(self.cycle_label)
+
+        toolbar.addSpacing(10)
 
         self.status_label = QLabel("")
         self.status_label.setFont(QFont("Consolas", 9))
@@ -491,3 +515,96 @@ class GCodeEditorPanel(QGroupBox):
     @property
     def is_modified(self) -> bool:
         return self._is_modified
+
+    # ── Send to Controller ──
+
+    def _on_send(self):
+        """Emit signal to send current editor content to controller."""
+        text = self.editor.toPlainText().strip()
+        if not text:
+            QMessageBox.information(self, "Empty", "No G-code to send.")
+            return
+        self.send_requested.emit(text)
+
+    # ── Inline Validation ──
+
+    def _validate_inline(self):
+        """Run validation and highlight error lines with squiggly underlines."""
+        text = self.editor.toPlainText()
+        if not text.strip():
+            QMessageBox.information(self, "Empty", "No G-code to validate.")
+            return
+
+        try:
+            from ..core.gcode_parser import GCodeValidator
+            validator = GCodeValidator()
+            issues, stats = validator.validate_text(text)
+
+            # Clear previous markers
+            self._validation_lines.clear()
+            extra_selections = []
+
+            # Highlight current line (keep existing behavior)
+            if not self.editor.isReadOnly():
+                sel = QTextEdit.ExtraSelection()
+                sel.format.setBackground(QColor("#2a2d2e"))
+                sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+                sel.cursor = self.editor.textCursor()
+                sel.cursor.clearSelection()
+                extra_selections.append(sel)
+
+            # Add error/warning markers
+            error_count = 0
+            warn_count = 0
+            for issue in issues:
+                line_num = issue.line_number
+                self._validation_lines.add(line_num)
+                block = self.editor.document().findBlockByLineNumber(line_num - 1)
+                if not block.isValid():
+                    continue
+
+                sel = QTextEdit.ExtraSelection()
+                cursor = QTextCursor(block)
+                cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor)
+                sel.cursor = cursor
+
+                if issue.severity.value == "error":
+                    sel.format.setUnderlineColor(QColor("#F44336"))
+                    sel.format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+                    sel.format.setToolTip(f"ERROR: {issue.message}")
+                    error_count += 1
+                else:
+                    sel.format.setUnderlineColor(QColor("#FFC107"))
+                    sel.format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+                    sel.format.setToolTip(f"WARNING: {issue.message}")
+                    warn_count += 1
+
+                extra_selections.append(sel)
+
+            self.editor.setExtraSelections(extra_selections)
+
+            # Update cycle time estimate
+            if stats.estimated_time_minutes > 0:
+                mins = int(stats.estimated_time_minutes)
+                secs = int((stats.estimated_time_minutes - mins) * 60)
+                self.cycle_label.setText(f"~{mins}m {secs}s")
+            else:
+                self.cycle_label.setText("")
+
+            # Show summary
+            if error_count == 0 and warn_count == 0:
+                self.cycle_label.setText(
+                    (self.cycle_label.text() + " | ✓ Valid").strip(" | ")
+                )
+            else:
+                parts = []
+                if error_count:
+                    parts.append(f"{error_count} error(s)")
+                if warn_count:
+                    parts.append(f"{warn_count} warning(s)")
+                self.cycle_label.setText(
+                    (self.cycle_label.text() + " | " + ", ".join(parts)).strip(" | ")
+                )
+
+        except Exception as e:
+            QMessageBox.warning(self, "Validation Error", str(e))

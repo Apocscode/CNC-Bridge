@@ -21,12 +21,12 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QGroupBox, QComboBox, QCheckBox, QFileDialog, QMessageBox,
-    QFrame, QSizePolicy,
+    QFrame, QSizePolicy, QSlider,
 )
-from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal
+from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal, QTimer
 from PyQt6.QtGui import (
     QPainter, QPen, QColor, QFont, QBrush, QPainterPath,
-    QMouseEvent, QWheelEvent, QPaintEvent, QTransform,
+    QMouseEvent, QWheelEvent, QPaintEvent, QTransform, QImage,
 )
 
 
@@ -251,10 +251,18 @@ class PlotCanvas(QWidget):
         self.show_origin = True
         self.show_tools = True
         self.show_drills = True
+        self.show_heat_map = False  # Feed-rate heat map coloring
+
+        # Animation state
+        self._anim_index = -1  # -1 = show all; >= 0 = show up to index
+        self._max_feed = 0.0   # For heat map normalization
 
     def set_data(self, data: PlotData):
         """Set plot data and auto-fit."""
         self._data = data
+        self._anim_index = -1  # Show all
+        # Compute max feed for heat map
+        self._max_feed = max((m.feed for m in data.moves if m.feed > 0), default=1.0)
         self.fit_view()
         self.update()
 
@@ -417,17 +425,28 @@ class PlotCanvas(QWidget):
         if not self._data:
             return
 
-        for move in self._data.moves:
+        max_idx = self._anim_index if self._anim_index >= 0 else len(self._data.moves)
+
+        for i, move in enumerate(self._data.moves):
+            if i >= max_idx:
+                break
+
             if move.move_type == "rapid":
                 if not self.show_rapids:
                     continue
                 pen = QPen(self.COLOR_RAPID, 1, Qt.PenStyle.DashLine)
-            elif move.move_type == "linear":
-                pen = QPen(self.COLOR_LINEAR, 1.5, Qt.PenStyle.SolidLine)
-            elif move.move_type == "cw_arc":
-                pen = QPen(self.COLOR_ARC_CW, 1.5, Qt.PenStyle.SolidLine)
-            elif move.move_type == "ccw_arc":
-                pen = QPen(self.COLOR_ARC_CCW, 1.5, Qt.PenStyle.SolidLine)
+            elif move.move_type in ("linear", "cw_arc", "ccw_arc"):
+                if self.show_heat_map and move.feed > 0:
+                    # Heat map: blue (slow) → green → yellow → red (fast)
+                    ratio = min(1.0, move.feed / self._max_feed) if self._max_feed > 0 else 0.5
+                    color = self._feed_to_color(ratio)
+                    pen = QPen(color, 1.5, Qt.PenStyle.SolidLine)
+                elif move.move_type == "linear":
+                    pen = QPen(self.COLOR_LINEAR, 1.5, Qt.PenStyle.SolidLine)
+                elif move.move_type == "cw_arc":
+                    pen = QPen(self.COLOR_ARC_CW, 1.5, Qt.PenStyle.SolidLine)
+                else:
+                    pen = QPen(self.COLOR_ARC_CCW, 1.5, Qt.PenStyle.SolidLine)
             elif move.move_type == "drill":
                 continue  # Handled separately
             else:
@@ -442,6 +461,33 @@ class PlotCanvas(QWidget):
                 self._draw_arc(painter, move)
             else:
                 painter.drawLine(p0, p1)
+
+        # Draw animation cursor (tool position indicator)
+        if self._anim_index > 0 and self._anim_index <= len(self._data.moves):
+            last = self._data.moves[self._anim_index - 1]
+            tp = self._to_screen(last.x1, last.y1)
+            pen = QPen(QColor("#FFFFFF"), 2)
+            painter.setPen(pen)
+            painter.drawEllipse(tp, 5, 5)
+            painter.drawLine(QPointF(tp.x() - 7, tp.y()), QPointF(tp.x() + 7, tp.y()))
+            painter.drawLine(QPointF(tp.x(), tp.y() - 7), QPointF(tp.x(), tp.y() + 7))
+
+    @staticmethod
+    def _feed_to_color(ratio: float) -> QColor:
+        """Convert feed ratio (0-1) to heat map color (blue→green→yellow→red)."""
+        if ratio < 0.25:
+            t = ratio / 0.25
+            r, g, b = 0, int(255 * t), 255
+        elif ratio < 0.5:
+            t = (ratio - 0.25) / 0.25
+            r, g, b = 0, 255, int(255 * (1 - t))
+        elif ratio < 0.75:
+            t = (ratio - 0.5) / 0.25
+            r, g, b = int(255 * t), 255, 0
+        else:
+            t = (ratio - 0.75) / 0.25
+            r, g, b = 255, int(255 * (1 - t)), 0
+        return QColor(r, g, b)
 
     def _draw_arc(self, painter: QPainter, move: PlotMove):
         """Draw a circular arc move."""
@@ -574,6 +620,47 @@ class PlotCanvas(QWidget):
     def leaveEvent(self, event):
         self.setCursor(Qt.CursorShape.ArrowCursor)
 
+    # ── Export ────────────────────────────────────────────────────
+
+    def render_to_image(self, width: int = 1920, height: int = 1080) -> QImage:
+        """Render the canvas to a QImage for export."""
+        image = QImage(width, height, QImage.Format.Format_ARGB32)
+        image.fill(QColor(self.COLOR_BG))
+
+        # Save current state
+        old_w, old_h = self.width(), self.height()
+        old_scale = self._scale
+        old_ox, old_oy = self._offset_x, self._offset_y
+
+        # Temporarily resize for rendering
+        self.resize(width, height)
+        self.fit_view()
+
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if self.show_grid:
+            self._draw_grid(painter)
+        if self.show_origin:
+            self._draw_origin(painter)
+        if self._data:
+            if self.show_bounds:
+                self._draw_bounds(painter)
+            self._draw_moves(painter)
+            if self.show_drills:
+                self._draw_drill_markers(painter)
+            if self.show_tools:
+                self._draw_tool_markers(painter)
+        painter.end()
+
+        # Restore
+        self.resize(old_w, old_h)
+        self._scale = old_scale
+        self._offset_x = old_ox
+        self._offset_y = old_oy
+
+        return image
+
 
 # ── Backplotter Panel (tab widget) ──────────────────────────────
 
@@ -600,6 +687,10 @@ class BackplotterPanel(QGroupBox):
         self.fit_btn.clicked.connect(self._fit_view)
         toolbar.addWidget(self.fit_btn)
 
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self._clear_plot)
+        toolbar.addWidget(self.clear_btn)
+
         toolbar.addSpacing(10)
 
         # View toggles
@@ -623,6 +714,12 @@ class BackplotterPanel(QGroupBox):
         self.tools_check.toggled.connect(self._on_toggle_tools)
         toolbar.addWidget(self.tools_check)
 
+        self.heat_check = QCheckBox("Heat Map")
+        self.heat_check.setChecked(False)
+        self.heat_check.setToolTip("Color toolpath by feed rate")
+        self.heat_check.toggled.connect(self._on_toggle_heat_map)
+        toolbar.addWidget(self.heat_check)
+
         toolbar.addStretch()
 
         # Coordinate display
@@ -632,6 +729,50 @@ class BackplotterPanel(QGroupBox):
         toolbar.addWidget(self.coord_label)
 
         layout.addLayout(toolbar)
+
+        # ── Animation Controls ──
+        anim_bar = QHBoxLayout()
+
+        self.play_btn = QPushButton("▶ Play")
+        self.play_btn.setFixedWidth(70)
+        self.play_btn.clicked.connect(self._anim_play_pause)
+        anim_bar.addWidget(self.play_btn)
+
+        self.stop_btn = QPushButton("⏹ Stop")
+        self.stop_btn.setFixedWidth(70)
+        self.stop_btn.clicked.connect(self._anim_stop)
+        anim_bar.addWidget(self.stop_btn)
+
+        self.step_btn = QPushButton("Step ▶|")
+        self.step_btn.setFixedWidth(70)
+        self.step_btn.clicked.connect(self._anim_step)
+        anim_bar.addWidget(self.step_btn)
+
+        self.anim_slider = QSlider(Qt.Orientation.Horizontal)
+        self.anim_slider.setMinimum(0)
+        self.anim_slider.setMaximum(100)
+        self.anim_slider.setValue(100)
+        self.anim_slider.valueChanged.connect(self._on_slider_changed)
+        anim_bar.addWidget(self.anim_slider, 1)
+
+        self.anim_label = QLabel("100%")
+        self.anim_label.setFont(QFont("Consolas", 9))
+        self.anim_label.setFixedWidth(50)
+        anim_bar.addWidget(self.anim_label)
+
+        anim_bar.addSpacing(10)
+
+        self.export_btn = QPushButton("Export PNG/PDF")
+        self.export_btn.clicked.connect(self._export_image)
+        anim_bar.addWidget(self.export_btn)
+
+        layout.addLayout(anim_bar)
+
+        # Animation timer
+        self._anim_timer = QTimer()
+        self._anim_timer.setInterval(30)  # ~33 fps
+        self._anim_timer.timeout.connect(self._anim_tick)
+        self._anim_playing = False
 
         # ── Canvas ──
         self.canvas = PlotCanvas()
@@ -690,6 +831,9 @@ class BackplotterPanel(QGroupBox):
         data = self._parser.parse(text)
         self.canvas.set_data(data)
 
+        # Reset animation
+        self._anim_stop()
+
         # Update stats
         moves = len(data.moves)
         rapid = sum(1 for m in data.moves if m.move_type == "rapid")
@@ -723,6 +867,13 @@ class BackplotterPanel(QGroupBox):
         self.canvas.fit_view()
         self.canvas.update()
 
+    def _clear_plot(self):
+        """Clear the backplotter display."""
+        self.canvas.clear()
+        self.canvas.update()
+        self.stats_label.setText("")
+        self.coord_label.setText("X: —  Y: —")
+
     def _update_coords(self, x: float, y: float):
         self.coord_label.setText(f"X: {x:.4f}  Y: {y:.4f}")
 
@@ -741,3 +892,177 @@ class BackplotterPanel(QGroupBox):
     def _on_toggle_tools(self, checked):
         self.canvas.show_tools = checked
         self.canvas.update()
+
+    def _on_toggle_heat_map(self, checked):
+        self.canvas.show_heat_map = checked
+        self.canvas.update()
+
+    # ── Animation ─────────────────────────────────────────────
+
+    def _anim_play_pause(self):
+        """Toggle play/pause for toolpath animation."""
+        if not self.canvas._data or not self.canvas._data.moves:
+            return
+
+        if self._anim_playing:
+            self._anim_timer.stop()
+            self._anim_playing = False
+            self.play_btn.setText("▶ Play")
+        else:
+            # If at end, restart
+            total = len(self.canvas._data.moves)
+            if self.canvas._anim_index < 0 or self.canvas._anim_index >= total:
+                self.canvas._anim_index = 0
+            self._anim_playing = True
+            self.play_btn.setText("⏸ Pause")
+            self._anim_timer.start()
+
+    def _anim_stop(self):
+        """Stop animation and show all moves."""
+        self._anim_timer.stop()
+        self._anim_playing = False
+        self.play_btn.setText("▶ Play")
+        self.canvas._anim_index = -1  # Show all
+        self.anim_slider.setValue(100)
+        self.anim_label.setText("100%")
+        self.canvas.update()
+
+    def _anim_step(self):
+        """Advance animation by one move."""
+        if not self.canvas._data or not self.canvas._data.moves:
+            return
+        total = len(self.canvas._data.moves)
+        if self.canvas._anim_index < 0:
+            self.canvas._anim_index = 1
+        elif self.canvas._anim_index < total:
+            self.canvas._anim_index += 1
+        self._update_anim_slider()
+        self.canvas.update()
+
+    def _anim_tick(self):
+        """Timer callback — advance animation frame."""
+        if not self.canvas._data or not self.canvas._data.moves:
+            self._anim_timer.stop()
+            return
+        total = len(self.canvas._data.moves)
+        # Advance by ~1-5 moves per tick depending on total moves
+        step = max(1, total // 300)
+        self.canvas._anim_index = min(self.canvas._anim_index + step, total)
+        self._update_anim_slider()
+        self.canvas.update()
+
+        if self.canvas._anim_index >= total:
+            self._anim_timer.stop()
+            self._anim_playing = False
+            self.play_btn.setText("▶ Play")
+
+    def _on_slider_changed(self, value):
+        """Slider moved — set animation position."""
+        if not self.canvas._data or not self.canvas._data.moves:
+            return
+        total = len(self.canvas._data.moves)
+        if value >= 100:
+            self.canvas._anim_index = -1  # Show all
+            self.anim_label.setText("100%")
+        else:
+            self.canvas._anim_index = max(0, int(total * value / 100))
+            self.anim_label.setText(f"{value}%")
+        self.canvas.update()
+
+    def _update_anim_slider(self):
+        """Update slider to match current animation position."""
+        if not self.canvas._data or not self.canvas._data.moves:
+            return
+        total = len(self.canvas._data.moves)
+        if self.canvas._anim_index < 0:
+            pct = 100
+        else:
+            pct = int(self.canvas._anim_index * 100 / total)
+        self.anim_slider.blockSignals(True)
+        self.anim_slider.setValue(pct)
+        self.anim_slider.blockSignals(False)
+        self.anim_label.setText(f"{pct}%")
+
+    # ── Export ────────────────────────────────────────────────
+
+    def _export_image(self):
+        """Export the backplot as PNG or PDF."""
+        if not self.canvas._data or not self.canvas._data.moves:
+            QMessageBox.information(self, "No Data", "Load a G-code file first.")
+            return
+
+        filepath, selected = QFileDialog.getSaveFileName(
+            self, "Export Backplot", "",
+            "PNG Image (*.png);;PDF Document (*.pdf);;All Files (*)"
+        )
+        if not filepath:
+            return
+
+        try:
+            if filepath.lower().endswith('.pdf'):
+                self._export_pdf(filepath)
+            else:
+                if not filepath.lower().endswith('.png'):
+                    filepath += '.png'
+                self._export_png(filepath)
+            QMessageBox.information(self, "Exported",
+                                    f"Backplot saved to:\n{filepath}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
+
+    def _export_png(self, filepath: str):
+        """Export backplot as PNG image."""
+        image = self.canvas.render_to_image(1920, 1080)
+        image.save(filepath, "PNG")
+
+    def _export_pdf(self, filepath: str):
+        """Export backplot as PDF document."""
+        from PyQt6.QtGui import QPdfWriter, QPageLayout, QPageSize
+        from PyQt6.QtCore import QMarginsF
+
+        writer = QPdfWriter(filepath)
+        writer.setPageSize(QPageSize(QPageSize.PageSizeId.Letter))
+        writer.setPageMargins(QMarginsF(20, 20, 20, 20))
+        writer.setResolution(300)
+
+        painter = QPainter(writer)
+
+        # Render at PDF resolution
+        w = writer.width()
+        h = writer.height()
+
+        # Save canvas state
+        old_scale = self.canvas._scale
+        old_ox, old_oy = self.canvas._offset_x, self.canvas._offset_y
+        old_w, old_h = self.canvas.width(), self.canvas.height()
+
+        self.canvas.resize(w, h)
+        self.canvas.fit_view()
+
+        # Paint
+        painter.fillRect(0, 0, w, h, self.canvas.COLOR_BG)
+        if self.canvas.show_grid:
+            self.canvas._draw_grid(painter)
+        if self.canvas.show_origin:
+            self.canvas._draw_origin(painter)
+        if self.canvas._data:
+            if self.canvas.show_bounds:
+                self.canvas._draw_bounds(painter)
+            self.canvas._draw_moves(painter)
+            if self.canvas.show_drills:
+                self.canvas._draw_drill_markers(painter)
+            if self.canvas.show_tools:
+                self.canvas._draw_tool_markers(painter)
+
+        # Title
+        painter.setPen(QPen(QColor("#d4d4d4")))
+        painter.setFont(QFont("Consolas", 12))
+        painter.drawText(50, 50, f"CNC Bridge Backplot — {self.stats_label.text()}")
+
+        painter.end()
+
+        # Restore
+        self.canvas.resize(old_w, old_h)
+        self.canvas._scale = old_scale
+        self.canvas._offset_x = old_ox
+        self.canvas._offset_y = old_oy
