@@ -8,6 +8,7 @@ UI panel for managing a persistent tool database.
   - Copy tool table to clipboard
 """
 
+import json
 import re
 
 from PyQt6.QtWidgets import (
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QMessageBox, QDialog, QFormLayout, QLineEdit, QSpinBox,
     QDoubleSpinBox, QDialogButtonBox, QApplication, QTextEdit,
+    QFileDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -156,6 +158,18 @@ class ToolLibraryPanel(QGroupBox):
         self.import_btn.setToolTip("Parse tools from G-code loaded in the Viewer or Editor")
         self.import_btn.clicked.connect(self._import_from_code)
         toolbar.addWidget(self.import_btn)
+
+        toolbar.addSpacing(10)
+
+        self.save_file_btn = QPushButton("Save to File")
+        self.save_file_btn.setToolTip("Export tool library to a JSON file for backup or sharing")
+        self.save_file_btn.clicked.connect(self._save_to_file)
+        toolbar.addWidget(self.save_file_btn)
+
+        self.load_file_btn = QPushButton("Load from File")
+        self.load_file_btn.setToolTip("Import tool library from a previously saved JSON file")
+        self.load_file_btn.clicked.connect(self._load_from_file)
+        toolbar.addWidget(self.load_file_btn)
 
         toolbar.addStretch()
 
@@ -425,3 +439,65 @@ class ToolLibraryPanel(QGroupBox):
 
         # Return sorted by tool number
         return sorted(tools_by_num.values(), key=lambda t: t.number)
+
+    # ── Save / Load to File ───────────────────────────────────
+
+    def _save_to_file(self):
+        """Export tool library to a user-chosen JSON file."""
+        if not self._settings.tools:
+            QMessageBox.information(self, "No Tools", "Add tools first.")
+            return
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Tool Library", "tool_library.json",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        if not filepath:
+            return
+        try:
+            data = [t.to_dict() for t in self._settings.tools]
+            with open(filepath, 'w') as f:
+                json.dump(data, f, indent=2)
+            QMessageBox.information(
+                self, "Saved",
+                f"Tool library saved to:\n{filepath}\n({len(data)} tools)"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to save: {e}")
+
+    def _load_from_file(self):
+        """Import tool library from a previously saved JSON file."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Load Tool Library", "",
+            "JSON Files (*.json);;All Files (*)"
+        )
+        if not filepath:
+            return
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+            tools = [ToolEntry.from_dict(t) for t in data]
+            if not tools:
+                QMessageBox.information(self, "Empty", "No tools found in file.")
+                return
+            result = QMessageBox.question(
+                self, "Load Tools",
+                f"Found {len(tools)} tool(s) in file.\n\n"
+                "Replace current library or merge?\n\n"
+                "Yes = Replace all  |  No = Merge (update existing, add new)",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel,
+            )
+            if result == QMessageBox.StandardButton.Cancel:
+                return
+            if result == QMessageBox.StandardButton.Yes:
+                # Replace — clear then add
+                self._settings.tools = []
+            for tool in tools:
+                self._settings.add_tool(tool)
+            self._refresh_table()
+            QMessageBox.information(
+                self, "Loaded",
+                f"{len(tools)} tool(s) loaded from:\n{filepath}"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load: {e}")

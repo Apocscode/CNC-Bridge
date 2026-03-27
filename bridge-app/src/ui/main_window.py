@@ -28,13 +28,13 @@ from PyQt6.QtWidgets import (
     QGridLayout, QSizePolicy, QLineEdit,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot
-from PyQt6.QtGui import QFont, QColor, QTextCharFormat, QAction, QIcon
+from PyQt6.QtGui import QFont, QColor, QTextCharFormat, QAction, QIcon, QTextCursor
 
 from ..core.serial_manager import (
     SerialManager, SerialConfig, ConnectionState, FlowControl, Parity
 )
 from ..core.dnc_sender import DNCEngine, SendMode, TransferState, TransferProgress
-from ..core.gcode_parser import GCodeParser, GCodeValidator
+from ..core.gcode_parser import GCodeParser, GCodeValidator, Severity
 from ..core.settings import AppSettings, ConnectionProfile
 from ..core.traffic_logger import SerialTrafficLogger
 from ..core.backup_vault import ProgramBackupVault
@@ -746,6 +746,7 @@ class GCodeViewerPanel(QGroupBox):
         issues, stats = self.validator.validate_text(self._current_text)
         summary = self.validator.get_summary()
         self.validation_output.setPlainText(summary)
+        self._highlight_issues(issues)
 
     def _clear(self):
         """Clear the viewer display."""
@@ -754,6 +755,56 @@ class GCodeViewerPanel(QGroupBox):
         self._current_text = ""
         self._current_file = ""
         self.stats_label.setText("")
+
+    def _highlight_issues(self, issues):
+        """Color-code lines in the code view that have validation issues."""
+        if not issues:
+            return
+        # Build a map: line_number → worst severity
+        line_severity: dict[int, Severity] = {}
+        for issue in issues:
+            ln = issue.line_number
+            if ln not in line_severity or issue.severity.value > line_severity[ln].value:
+                line_severity[ln] = issue.severity
+
+        # Build tooltip map: line_number → list of messages
+        line_tips: dict[int, list[str]] = {}
+        for issue in issues:
+            ln = issue.line_number
+            prefix = "ERROR" if issue.severity == Severity.ERROR else "WARN"
+            line_tips.setdefault(ln, []).append(f"[{prefix}] {issue.code}: {issue.message}")
+
+        # Apply background highlights to affected lines
+        doc = self.code_view.document()
+        cursor = QTextCursor(doc)
+        cursor.beginEditBlock()
+
+        for line_num, severity in line_severity.items():
+            block = doc.findBlockByNumber(line_num - 1)  # 0-indexed blocks
+            if not block.isValid():
+                continue
+
+            fmt = QTextCharFormat()
+            if severity == Severity.ERROR:
+                fmt.setBackground(QColor("#3a1e1e"))       # red tint
+                fmt.setForeground(QColor("#F44336"))
+            elif severity == Severity.WARNING:
+                fmt.setBackground(QColor("#3a3a1e"))       # yellow tint
+                fmt.setForeground(QColor("#DCDCAA"))
+            else:
+                fmt.setBackground(QColor("#1e2a3a"))       # blue tint
+                fmt.setForeground(QColor("#569CD6"))
+
+            # Build tooltip
+            tip = "\n".join(line_tips.get(line_num, []))
+            fmt.setToolTip(tip)
+
+            # Select entire block and apply format
+            cursor.setPosition(block.position())
+            cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor)
+            cursor.setCharFormat(fmt)
+
+        cursor.endEditBlock()
 
     def get_text(self) -> str:
         return self._current_text

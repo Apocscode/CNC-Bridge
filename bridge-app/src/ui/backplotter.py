@@ -754,8 +754,8 @@ class BackplotterPanel(QGroupBox):
         anim_bar.addWidget(speed_label)
 
         self.speed_combo = QComboBox()
-        self.speed_combo.addItems(["0.1x", "0.25x", "0.5x", "1x", "2x", "5x", "10x"])
-        self.speed_combo.setCurrentIndex(3)  # Default 1x
+        self.speed_combo.addItems(["100%", "75%", "50%", "25%", "10%", "5%"])
+        self.speed_combo.setCurrentIndex(0)  # Default 100%
         self.speed_combo.setFixedWidth(65)
         self.speed_combo.setStyleSheet("QComboBox { background-color: #3c3c3c; color: #d4d4d4; padding: 2px; }")
         anim_bar.addWidget(self.speed_combo)
@@ -958,15 +958,15 @@ class BackplotterPanel(QGroupBox):
             self._anim_timer.stop()
             return
         total = len(self.canvas._data.moves)
-        # Speed multiplier from combo box
-        speed_text = self.speed_combo.currentText().replace("x", "")
+        # Speed percentage from combo box (100% = fastest, 5% = slowest)
+        speed_text = self.speed_combo.currentText().replace("%", "")
         try:
-            speed_mult = float(speed_text)
+            speed_pct = float(speed_text) / 100.0
         except ValueError:
-            speed_mult = 1.0
+            speed_pct = 1.0
         # Advance by scaled moves per tick depending on total moves
         base_step = max(1, total // 300)
-        step = max(1, int(base_step * speed_mult))
+        step = max(1, int(base_step * speed_pct))
         self.canvas._anim_index = min(self.canvas._anim_index + step, total)
         self._update_anim_slider()
         self.canvas.update()

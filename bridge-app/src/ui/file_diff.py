@@ -192,6 +192,7 @@ class FileDiffPanel(QGroupBox):
             self.label_a.setText(Path(filepath).name)
             self.label_a.setStyleSheet("color: #d4d4d4;")
             self.header_a.setText(Path(filepath).name)
+            self._show_plain_text()
 
     def _open_file_b(self):
         filepath, _ = QFileDialog.getOpenFileName(
@@ -204,6 +205,7 @@ class FileDiffPanel(QGroupBox):
             self.label_b.setText(Path(filepath).name)
             self.label_b.setStyleSheet("color: #d4d4d4;")
             self.header_b.setText(Path(filepath).name)
+            self._show_plain_text()
 
     def _read_file(self, filepath: str) -> str:
         try:
@@ -212,6 +214,15 @@ class FileDiffPanel(QGroupBox):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read file: {e}")
             return ""
+
+    def _show_plain_text(self):
+        """Show loaded file contents immediately (without diff highlighting)."""
+        if self._text_a:
+            plain_a = [(' ', line) for line in self._text_a.splitlines()]
+            self.diff_view_a.set_diff_content(plain_a)
+        if self._text_b:
+            plain_b = [(' ', line) for line in self._text_b.splitlines()]
+            self.diff_view_b.set_diff_content(plain_b)
 
     def _swap_files(self):
         self._file_a, self._file_b = self._file_b, self._file_a
