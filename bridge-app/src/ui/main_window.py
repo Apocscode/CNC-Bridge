@@ -40,6 +40,9 @@ from ..core.traffic_logger import SerialTrafficLogger
 from ..core.backup_vault import ProgramBackupVault
 from ..core.update_checker import check_for_updates, UpdateInfo
 from ..core.connection_tester import ConnectionTester
+from ..core.macro_recorder import MacroRecorder, MacroPlayer, Macro
+from ..core.program_library import ProgramLibrary, ProgramEntry
+from ..core.comment_translator import translate_gcode, get_supported_languages
 from .library_panel import LibraryPanel
 from .gcode_editor import GCodeEditorPanel
 from .backplotter import BackplotterPanel
@@ -501,6 +504,8 @@ class SerialTerminal(QGroupBox):
 
     def __init__(self, parent=None):
         super().__init__("Serial Terminal", parent)
+        self._macro_recorder = MacroRecorder()
+        self._macro_player = MacroPlayer()
         self._build_ui()
 
     def _build_ui(self):
@@ -534,6 +539,34 @@ class SerialTerminal(QGroupBox):
         input_row.addWidget(self.clear_btn)
         layout.addLayout(input_row)
 
+        # Macro row
+        macro_row = QHBoxLayout()
+        macro_row.addWidget(QLabel("Macros:"))
+
+        self.macro_record_btn = QPushButton("⏺ Record")
+        self.macro_record_btn.setToolTip("Start recording terminal commands as a macro")
+        self.macro_record_btn.clicked.connect(self._on_macro_record)
+
+        self.macro_stop_btn = QPushButton("⏹ Stop")
+        self.macro_stop_btn.setToolTip("Stop recording the current macro")
+        self.macro_stop_btn.setEnabled(False)
+        self.macro_stop_btn.clicked.connect(self._on_macro_stop)
+
+        self.macro_play_btn = QPushButton("▶ Play")
+        self.macro_play_btn.setToolTip("Play a saved macro")
+        self.macro_play_btn.clicked.connect(self._on_macro_play)
+
+        self.macro_combo = QComboBox()
+        self.macro_combo.setMinimumWidth(140)
+        self.macro_combo.setToolTip("Select a macro to play")
+        self._refresh_macros()
+
+        macro_row.addWidget(self.macro_record_btn)
+        macro_row.addWidget(self.macro_stop_btn)
+        macro_row.addWidget(self.macro_combo, 1)
+        macro_row.addWidget(self.macro_play_btn)
+        layout.addLayout(macro_row)
+
         self.setLayout(layout)
 
     def _on_send(self):
@@ -541,7 +574,84 @@ class SerialTerminal(QGroupBox):
         if text:
             self.append_text(f">>> {text}", "#569CD6")
             self.send_command.emit(text)
+            # Record macro step if recording
+            if self._macro_recorder.is_recording:
+                self._macro_recorder.record_command(text)
             self.input_field.clear()
+
+    def _refresh_macros(self):
+        """Reload available macros into the combo box."""
+        self.macro_combo.clear()
+        macros = Macro.list_macros()
+        if macros:
+            for name in macros:
+                self.macro_combo.addItem(name)
+        else:
+            self.macro_combo.addItem("(no macros)")
+
+    def _on_macro_record(self):
+        """Start recording terminal commands as a macro."""
+        from PyQt6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(
+            self, "Record Macro", "Macro name:",
+        )
+        if ok and name.strip():
+            self._macro_recorder.start(name.strip())
+            self.macro_record_btn.setEnabled(False)
+            self.macro_record_btn.setText("⏺ Recording...")
+            self.macro_record_btn.setStyleSheet("QPushButton { color: #F44336; font-weight: bold; }")
+            self.macro_stop_btn.setEnabled(True)
+            self.append_info(f"Recording macro: {name.strip()}")
+
+    def _on_macro_stop(self):
+        """Stop recording and save the macro."""
+        macro = self._macro_recorder.stop()
+        if macro and macro.steps:
+            macro.save()
+            self.append_info(f"Macro saved: {macro.name} ({len(macro.steps)} steps)")
+            self._refresh_macros()
+            self.macro_combo.setCurrentText(macro.name)
+        else:
+            self.append_info("Macro discarded (no commands recorded)")
+        self.macro_record_btn.setEnabled(True)
+        self.macro_record_btn.setText("⏺ Record")
+        self.macro_record_btn.setStyleSheet("")
+        self.macro_stop_btn.setEnabled(False)
+
+    def _on_macro_play(self):
+        """Play the selected macro."""
+        name = self.macro_combo.currentText()
+        if not name or name == "(no macros)":
+            return
+        macro = Macro.load(name)
+        if not macro:
+            self.append_error(f"Macro not found: {name}")
+            return
+
+        self.append_info(f"Playing macro: {name} ({len(macro.steps)} steps)")
+        self.macro_play_btn.setEnabled(False)
+        total_steps = len(macro.steps)
+
+        def send_fn(cmd):
+            self.append_text(f">>> {cmd}", "#569CD6")
+            self.send_command.emit(cmd)
+
+        def on_step(step_idx, cmd):
+            self.append_info(f"  Step {step_idx + 1}/{total_steps}: {cmd}")
+
+        def on_done():
+            self.append_info(f"Macro complete: {name}")
+
+        import threading
+        def run():
+            self._macro_player.play(
+                macro, send_callback=send_fn,
+                on_step=lambda i, c: QTimer.singleShot(0, lambda: on_step(i, c)),
+            )
+            QTimer.singleShot(0, on_done)
+            QTimer.singleShot(0, lambda: self.macro_play_btn.setEnabled(True))
+
+        threading.Thread(target=run, daemon=True).start()
 
     def append_text(self, text: str, color: str = "#d4d4d4"):
         self.output.appendHtml(f'<span style="color: {color};">{text}</span>')
@@ -680,6 +790,12 @@ class MainWindow(QMainWindow):
         # Connection tester
         self.conn_tester = ConnectionTester(self.serial_mgr)
 
+        # Program library
+        self.program_library = ProgramLibrary()
+
+        # Theme state
+        self._current_theme = "dark"
+
         # Auto-reconnect state
         self._auto_reconnect = True
         self._reconnect_timer = QTimer()
@@ -694,7 +810,17 @@ class MainWindow(QMainWindow):
         self._refresh_ports()
 
         # Apply dark theme
+        self._current_theme = self.settings.window.theme or "dark"
         self._apply_theme()
+
+        # Apply touch mode if saved
+        if self.settings.window.touch_mode:
+            self.touch_mode_action.setChecked(True)
+            self._apply_touch_mode(True)
+
+        # Update theme checkmarks
+        self.dark_theme_action.setChecked(self._current_theme == "dark")
+        self.light_theme_action.setChecked(self._current_theme == "light")
 
         # Check for updates (background)
         self._check_updates()
@@ -804,6 +930,29 @@ class MainWindow(QMainWindow):
             action.triggered.connect(lambda checked, i=idx: self.tabs.setCurrentIndex(i))
             view_menu.addAction(action)
 
+        view_menu.addSeparator()
+
+        # Theme toggle
+        theme_menu = view_menu.addMenu("&Theme")
+        self.dark_theme_action = QAction("&Dark Theme", self)
+        self.dark_theme_action.setCheckable(True)
+        self.dark_theme_action.setChecked(True)
+        self.dark_theme_action.triggered.connect(lambda: self._set_theme("dark"))
+        theme_menu.addAction(self.dark_theme_action)
+
+        self.light_theme_action = QAction("&Light Theme", self)
+        self.light_theme_action.setCheckable(True)
+        self.light_theme_action.triggered.connect(lambda: self._set_theme("light"))
+        theme_menu.addAction(self.light_theme_action)
+
+        view_menu.addSeparator()
+
+        # Touch-screen mode
+        self.touch_mode_action = QAction("Touch-Screen &Mode", self)
+        self.touch_mode_action.setCheckable(True)
+        self.touch_mode_action.triggered.connect(self._toggle_touch_mode)
+        view_menu.addAction(self.touch_mode_action)
+
         # Tools menu
         tools_menu = menubar.addMenu("Too&ls")
         diff_action = QAction("Compare &Files...", self)
@@ -813,6 +962,22 @@ class MainWindow(QMainWindow):
         backplot_action = QAction("&Backplot Current File", self)
         backplot_action.triggered.connect(self._backplot_current)
         tools_menu.addAction(backplot_action)
+
+        tools_menu.addSeparator()
+
+        translate_menu = tools_menu.addMenu("Translate &Comments")
+        translate_es = QAction("English → Español", self)
+        translate_es.triggered.connect(lambda: self._translate_comments("es"))
+        translate_menu.addAction(translate_es)
+        translate_en = QAction("Español → English", self)
+        translate_en.triggered.connect(lambda: self._translate_comments("en"))
+        translate_menu.addAction(translate_en)
+
+        tools_menu.addSeparator()
+
+        prog_lib_action = QAction("&Program Library...", self)
+        prog_lib_action.triggered.connect(self._show_program_library)
+        tools_menu.addAction(prog_lib_action)
 
         # Help menu
         help_menu = menubar.addMenu("&Help")
@@ -1159,6 +1324,10 @@ class MainWindow(QMainWindow):
 
         self.settings.window.last_tab = self.tabs.currentIndex()
 
+        # Save theme / touch mode
+        self.settings.window.theme = self._current_theme
+        self.settings.window.touch_mode = self.touch_mode_action.isChecked()
+
         # Save serial combo state
         self.settings.serial.baud_rate = int(self.conn_panel.baud_combo.currentText())
         self.settings.serial.data_bits = int(self.conn_panel.databits_combo.currentText())
@@ -1236,7 +1405,7 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         QMessageBox.about(self, "About CNC Bridge",
-            "<h2>CNC Bridge v2.1</h2>"
+            "<h2>CNC Bridge v3.0</h2>"
             "<p>Anilam Crusader M / II Communication Bridge</p>"
             "<p>Features:</p>"
             "<ul>"
@@ -1258,13 +1427,33 @@ class MainWindow(QMainWindow):
             "<li>G-code Snippet Templates</li>"
             "<li>Backplot Export (PNG/PDF)</li>"
             "<li>228-entry Reference Library</li>"
+            "<li>Macro Recorder & Playback</li>"
+            "<li>Program Library & Favorites</li>"
+            "<li>Multi-language Comment Translation</li>"
+            "<li>Dark / Light Theme Toggle</li>"
+            "<li>Touch-Screen Mode</li>"
             "</ul>"
             "<p>© 2026 Apocscode — MIT License</p>"
         )
 
     # --- Theme ---
 
+    def _set_theme(self, theme: str):
+        """Switch between dark and light themes."""
+        self._current_theme = theme
+        self.settings.window.theme = theme
+        self.settings.save()
+        self.dark_theme_action.setChecked(theme == "dark")
+        self.light_theme_action.setChecked(theme == "light")
+        self._apply_theme()
+
     def _apply_theme(self):
+        if self._current_theme == "light":
+            self._apply_light_theme()
+        else:
+            self._apply_dark_theme()
+
+    def _apply_dark_theme(self):
         self.setStyleSheet("""
             QMainWindow { background-color: #1e1e1e; }
             QWidget { background-color: #252526; color: #d4d4d4; font-size: 12px; }
@@ -1330,6 +1519,263 @@ class MainWindow(QMainWindow):
             QLabel { background-color: transparent; }
             QFrame { background-color: transparent; }
         """)
+
+    def _apply_light_theme(self):
+        self.setStyleSheet("""
+            QMainWindow { background-color: #f5f5f5; }
+            QWidget { background-color: #ffffff; color: #1e1e1e; font-size: 12px; }
+            QGroupBox {
+                border: 1px solid #c0c0c0;
+                border-radius: 4px;
+                margin-top: 8px;
+                padding-top: 16px;
+                font-weight: bold;
+                color: #0060C0;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit {
+                background-color: #ffffff;
+                border: 1px solid #c0c0c0;
+                border-radius: 3px;
+                padding: 3px;
+                color: #1e1e1e;
+            }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView {
+                background-color: #ffffff;
+                color: #1e1e1e;
+                selection-background-color: #cce5ff;
+            }
+            QPushButton {
+                background-color: #e8e8e8;
+                border: 1px solid #c0c0c0;
+                border-radius: 3px;
+                padding: 4px 12px;
+                color: #1e1e1e;
+            }
+            QPushButton:hover { background-color: #d0d0d0; }
+            QPushButton:pressed { background-color: #b0b0b0; }
+            QPushButton:disabled { background-color: #f0f0f0; color: #aaa; }
+            QTabWidget::pane { border: 1px solid #c0c0c0; }
+            QTabBar::tab {
+                background-color: #e8e8e8;
+                border: 1px solid #c0c0c0;
+                padding: 6px 16px;
+                color: #666;
+            }
+            QTabBar::tab:selected { background-color: #ffffff; color: #1e1e1e; border-bottom: 2px solid #0060C0; }
+            QTabBar::tab:hover { color: #1e1e1e; }
+            QProgressBar {
+                border: 1px solid #c0c0c0;
+                border-radius: 3px;
+                text-align: center;
+                background-color: #e8e8e8;
+                color: #1e1e1e;
+            }
+            QProgressBar::chunk { background-color: #4CAF50; border-radius: 2px; }
+            QStatusBar { background-color: #007ACC; color: white; }
+            QMenuBar { background-color: #e8e8e8; color: #1e1e1e; }
+            QMenuBar::item:selected { background-color: #cce5ff; }
+            QMenu { background-color: #ffffff; color: #1e1e1e; }
+            QMenu::item:selected { background-color: #cce5ff; }
+            QSplitter::handle { background-color: #c0c0c0; height: 2px; }
+            QPlainTextEdit { background-color: #fafafa; color: #1e1e1e; }
+            QLabel { background-color: transparent; }
+            QFrame { background-color: transparent; }
+        """)
+
+    # --- Touch-Screen Mode ---
+
+    def _toggle_touch_mode(self):
+        """Toggle touch-screen mode with larger buttons."""
+        enabled = self.touch_mode_action.isChecked()
+        self.settings.window.touch_mode = enabled
+        self.settings.save()
+        self._apply_touch_mode(enabled)
+
+    def _apply_touch_mode(self, enabled: bool):
+        """Apply or remove touch-screen scaling."""
+        if enabled:
+            # Increase all button/input sizes for touch screens
+            extra = """
+                QPushButton { min-height: 36px; font-size: 14px; padding: 6px 16px; }
+                QComboBox { min-height: 32px; font-size: 14px; }
+                QLineEdit { min-height: 32px; font-size: 14px; }
+                QSpinBox, QDoubleSpinBox { min-height: 32px; font-size: 14px; }
+                QTabBar::tab { padding: 10px 20px; font-size: 14px; }
+                QLabel { font-size: 14px; }
+                QGroupBox { font-size: 14px; }
+            """
+            current = self.styleSheet()
+            self.setStyleSheet(current + extra)
+            self.statusBar().showMessage("Touch-screen mode enabled")
+        else:
+            # Re-apply the regular theme to remove overrides
+            self._apply_theme()
+            self.statusBar().showMessage("Touch-screen mode disabled")
+
+    # --- Comment Translation ---
+
+    def _translate_comments(self, to_language: str):
+        """Translate G-code comments in the editor."""
+        if self.tabs.currentWidget() != self.gcode_editor:
+            self.tabs.setCurrentWidget(self.gcode_editor)
+
+        text = self.gcode_editor.get_text()
+        if not text.strip():
+            QMessageBox.information(self, "Empty", "No G-code to translate.")
+            return
+
+        translated = translate_gcode(text, to_language)
+        lang_name = "Español" if to_language == "es" else "English"
+
+        if translated != text:
+            self.gcode_editor.editor.setPlainText(translated)
+            self.terminal.append_info(f"Comments translated to {lang_name}")
+            self.statusBar().showMessage(f"Comments translated to {lang_name}", 5000)
+        else:
+            self.statusBar().showMessage("No translatable comments found", 5000)
+
+    # --- Program Library ---
+
+    def _show_program_library(self):
+        """Show program library management dialog."""
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QListWidget, QListWidgetItem
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Program Library")
+        dlg.resize(600, 450)
+
+        layout = QVBoxLayout()
+
+        # Search bar
+        search_row = QHBoxLayout()
+        search_lbl = QLabel("Search:")
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("Search programs, tags, materials...")
+        search_row.addWidget(search_lbl)
+        search_row.addWidget(search_input, 1)
+        layout.addLayout(search_row)
+
+        # Program list
+        prog_list = QListWidget()
+        prog_list.setFont(QFont("Consolas", 10))
+        layout.addWidget(prog_list)
+
+        # Info display
+        info_label = QLabel("")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+        add_btn = QPushButton("Add Current File")
+        fav_btn = QPushButton("★ Toggle Favorite")
+        load_btn = QPushButton("Load Selected")
+        remove_btn = QPushButton("Remove")
+
+        btn_row.addWidget(add_btn)
+        btn_row.addWidget(fav_btn)
+        btn_row.addWidget(load_btn)
+        btn_row.addWidget(remove_btn)
+        layout.addLayout(btn_row)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.accept)
+        layout.addWidget(close_btn)
+
+        dlg.setLayout(layout)
+
+        def refresh_list(query=""):
+            prog_list.clear()
+            if query:
+                entries = self.program_library.search(query)
+            else:
+                entries = list(self.program_library.entries.values())
+            entries.sort(key=lambda e: (not e.favorite, e.name.lower()))
+            for entry in entries:
+                star = "★ " if entry.favorite else "  "
+                item = QListWidgetItem(f"{star}{entry.name}")
+                item.setData(Qt.ItemDataRole.UserRole, entry.name)
+                prog_list.addItem(item)
+
+        def on_select():
+            item = prog_list.currentItem()
+            if item:
+                name = item.data(Qt.ItemDataRole.UserRole)
+                entry = self.program_library.get(name)
+                if entry:
+                    info = f"<b>{entry.name}</b>"
+                    if entry.description:
+                        info += f"<br>{entry.description}"
+                    if entry.material:
+                        info += f"<br>Material: {entry.material}"
+                    if entry.tags:
+                        info += f"<br>Tags: {', '.join(entry.tags)}"
+                    info += f"<br>Used {entry.use_count}x"
+                    info_label.setText(info)
+
+        def on_add():
+            filepath = self.gcode_editor.filepath if hasattr(self.gcode_editor, 'filepath') else ""
+            if not filepath:
+                # Try viewer
+                filepath = getattr(self.gcode_viewer, '_current_file', '')
+            if not filepath:
+                QMessageBox.information(dlg, "No File", "Open a G-code file first.")
+                return
+            from PyQt6.QtWidgets import QInputDialog
+            desc, ok = QInputDialog.getText(dlg, "Description", "Description (optional):")
+            if ok:
+                entry = ProgramEntry(
+                    name=Path(filepath).name,
+                    filepath=str(filepath),
+                    description=desc or "",
+                )
+                self.program_library.add(entry)
+                refresh_list(search_input.text())
+
+        def on_load():
+            item = prog_list.currentItem()
+            if item:
+                name = item.data(Qt.ItemDataRole.UserRole)
+                entry = self.program_library.get(name)
+                if entry and Path(entry.filepath).exists():
+                    self.program_library.mark_used(name)
+                    self.gcode_editor.load_file(entry.filepath)
+                    self.tabs.setCurrentWidget(self.gcode_editor)
+                    dlg.accept()
+                elif entry:
+                    QMessageBox.warning(dlg, "Not Found",
+                                        f"File no longer exists:\n{entry.filepath}")
+
+        def on_fav():
+            item = prog_list.currentItem()
+            if item:
+                name = item.data(Qt.ItemDataRole.UserRole)
+                self.program_library.toggle_favorite(name)
+                refresh_list(search_input.text())
+
+        def on_remove():
+            item = prog_list.currentItem()
+            if item:
+                name = item.data(Qt.ItemDataRole.UserRole)
+                self.program_library.remove(name)
+                refresh_list(search_input.text())
+
+        add_btn.clicked.connect(on_add)
+        load_btn.clicked.connect(on_load)
+        fav_btn.clicked.connect(on_fav)
+        remove_btn.clicked.connect(on_remove)
+        search_input.textChanged.connect(refresh_list)
+        prog_list.currentItemChanged.connect(lambda: on_select())
+        prog_list.doubleClicked.connect(on_load)
+
+        refresh_list()
+        dlg.exec()
 
     # --- Recent Files ---
 

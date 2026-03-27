@@ -31,6 +31,8 @@ class WindowSettings:
     height: int = 900
     maximized: bool = False
     last_tab: int = 0
+    theme: str = "dark"          # "dark" or "light"
+    touch_mode: bool = False     # larger buttons for touch screens
 
 
 @dataclass
@@ -138,6 +140,8 @@ class AppSettings:
                     width=w.get('width', 1400), height=w.get('height', 900),
                     maximized=w.get('maximized', False),
                     last_tab=w.get('last_tab', 0),
+                    theme=w.get('theme', 'dark'),
+                    touch_mode=w.get('touch_mode', False),
                 )
 
             # Serial

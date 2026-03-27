@@ -21,7 +21,7 @@ logger = logging.getLogger("CNCBridge")
 
 def main():
     """Launch the CNC Bridge application."""
-    logger.info("Starting CNC Bridge v2.1.0")
+    logger.info("Starting CNC Bridge v3.0.0")
 
     try:
         from PyQt6.QtWidgets import QApplication
@@ -35,7 +35,7 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("CNC Bridge")
-    app.setApplicationVersion("2.1.0")
+    app.setApplicationVersion("3.0.0")
     app.setOrganizationName("CNC Bridge Project")
 
     # Default font
