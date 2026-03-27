@@ -914,14 +914,19 @@ class BackplotterPanel(QGroupBox):
     # ── Animation ─────────────────────────────────────────────
 
     def _get_timer_interval(self) -> int:
-        """Calculate timer interval from speed combo. 100%=30ms, 5%=600ms."""
-        speed_text = self.speed_combo.currentText().replace("%", "")
-        try:
-            speed_pct = float(speed_text) / 100.0
-        except ValueError:
-            speed_pct = 1.0
-        speed_pct = max(0.01, speed_pct)
-        return int(30 / speed_pct)
+        """Calculate timer interval from speed combo.
+        100% = 15ms, 75% = 30ms, 50% = 60ms, 25% = 150ms, 10% = 400ms, 5% = 800ms.
+        """
+        speed_map = {
+            "100%": 15,
+            "75%": 30,
+            "50%": 60,
+            "25%": 150,
+            "10%": 400,
+            "5%": 800,
+        }
+        text = self.speed_combo.currentText()
+        return speed_map.get(text, 30)
 
     def _on_speed_changed(self, _index):
         """Update timer interval when speed combo changes mid-playback."""
@@ -974,8 +979,14 @@ class BackplotterPanel(QGroupBox):
             self._anim_timer.stop()
             return
         total = len(self.canvas._data.moves)
-        # Step size scales with program length (1 move for small, more for large)
-        step = max(1, total // 300)
+        # At 100% use larger steps for long programs; slower speeds always step=1
+        speed_text = self.speed_combo.currentText()
+        if speed_text == "100%":
+            step = max(1, total // 200)
+        elif speed_text == "75%":
+            step = max(1, total // 400)
+        else:
+            step = 1
         self.canvas._anim_index = min(self.canvas._anim_index + step, total)
         self._update_anim_slider()
         self.canvas.update()
