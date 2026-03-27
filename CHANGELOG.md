@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [3.0.0] — 2026-03-27
+
+### Added
+- **Macro Recorder** — Record, play, and edit keystroke macros for repetitive editing tasks (persists in `config/macros.json`)
+- **Program Library** — Tag, search, and organize saved G-code programs with metadata (description, tags, date)
+- **Comment Translator** — Auto-translate G-code comments between English, Spanish, and French (200+ machining terms)
+- **Dark / Light Theme** — VS Code-inspired dark theme (default) with one-click toggle via View → Theme
+- **Touch-Screen Mode** — Enlarged buttons, spacing, and fonts for shop-floor touchscreen PCs via View → Touch Mode
+- **Backplotter Speed Control** — Adjustable playback speed (100% / 75% / 50% / 25% / 10% / 5%) with explicit timer interval map
+- **Tool Library — Import from Code** — Parse tool comments and T10xx table blocks from G-code files
+- **Tool Library — Save / Load** — Export and import tool libraries as JSON files with Replace or Merge mode
+- **File Diff — Preview on Load** — Shows both files immediately when loaded, before running diff compare
+- **Validation Color-Coding** — G-code Viewer highlights error lines red and warning lines yellow in the code display
+- **Validation Output Highlighting** — `[ERROR]` and `[WARN]` rows in the validation summary pane are color-coded
+- **Test Programs** — Two multi-operation test programs: `test_part_v1.txt` (Rev A, 8 tools, 510 lines), `test_part_v2.txt` (Rev B, 9 tools, 552 lines)
+- **Screenshot Capture Script** — `capture_screenshots.py` auto-loads test data and captures all dashboard screenshots
+
+### Changed
+- Version bumped to 3.0.0
+- Backplotter animation uses timer-interval approach (15ms–800ms) instead of step-size for smoother speed control
+- Tool Library panel expanded with Import from Code, Save to File, Load from File buttons
+- File Diff panel shows loaded file content immediately without requiring Compare click
+- README updated with v3.0 features, project structure tree, and fresh screenshots
+- All documentation updated (quickstart, troubleshooting, quick-reference-card)
+
+---
+
 ## [2.1.0] — 2026-03-26
 
 ### Added

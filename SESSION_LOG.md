@@ -241,17 +241,80 @@ Development history and changelog for the CNC Bridge project.
 
 ---
 
+## Session 7 — v3.0 Feature Expansion
+**Date:** March 2026
+
+### Created (5 Core Features)
+- **Macro Recorder** (`macro_recorder.py`) — Record, play, and edit keystroke macros for repetitive editing tasks. Macros persist in `config/macros.json`
+- **Program Library** (`program_library.py`) — Tag, search, and organize saved G-code programs with metadata (description, tags, date, file path)
+- **Comment Translator** (`comment_translator.py`) — Auto-translate G-code comments between English, Spanish, and French using a built-in machining dictionary (200+ terms)
+- **Dark / Light Theme** — VS Code-inspired dark theme (default) with one-click toggle to light mode via View → Theme
+- **Touch-Screen Mode** — Enlarged buttons, spacing, and font sizes for shop-floor touchscreen PCs via View → Touch Mode
+
+### Git
+- Committed as d203ed5: "v3.0: macro recorder, program library, comment translator, dark/light theme, touch mode"
+- Pushed to origin/master
+
+---
+
+## Session 8 — Test Programs, Backplotter Polish, Documentation
+**Date:** March 2026
+
+### Created
+- **Test Programs** (`bridge-app/test_programs/`)
+  - `test_part_v1.txt` — Rev A, 8 tools, 510 lines — multi-operation machining program (face mill, drill, tap, contour, pocket, chamfer, bore, engrave)
+  - `test_part_v2.txt` — Rev B, 9 tools, 552 lines — adds thread mill op, modified feeds/speeds, deeper pocket, extra drill holes
+- **Screenshot Capture Script** (`bridge-app/capture_screenshots.py`) — Auto-loads test data into all 7 tabs and captures 8 dashboard screenshots to `docs/images/`
+
+### Added (8 Features)
+- **Backplotter Speed Control** — Adjustable playback speed dropdown (100% / 75% / 50% / 25% / 10% / 5%) with explicit timer interval map (15ms–800ms) and step scaling for smooth animation
+- **Tool Library — Import from Code** — "Import from Code" button parses tool comments `( T1 — 0.500 4FL END MILL )` and T10xx table blocks `T1001 X0.5000 Z3.2500` from G-code files
+- **Tool Library — Save / Load** — Export tool libraries as JSON files, import with Replace or Merge mode
+- **File Diff — Preview on Load** — Shows both files immediately when loaded (before running diff compare)
+- **Validation Color-Coding** — G-code Viewer highlights error lines red and warning lines yellow in the code display
+- **Validation Output Highlighting** — `[ERROR]` and `[WARN]` rows in the validation summary pane are color-coded red/yellow
+- **Diff shows files on load** — `_show_plain_text()` renders loaded files without diff markers for immediate preview
+- **Speed control fix** — Replaced step-size approach (clamped to 1) with timer-interval approach; then improved with explicit interval map for dramatic speed differences
+
+### Updated (Documentation)
+- **README.md** — Added v3.0 features section (11 items), renamed v2.1 section, updated project structure tree with new files (`macro_recorder.py`, `program_library.py`, `comment_translator.py`, `test_programs/`, `capture_screenshots.py`), updated Features bullet list with 9 new entries
+- **docs/quickstart.md** — Version bump to v3.0 download link, added 9 new tips (speed control, import from code, save/load tools, macro recorder, program library, comment translator, theme, touch mode, validation colors)
+- **docs/troubleshooting.md** — Added 6 new troubleshooting sections (Theme Not Changing, Tool Library Import from Code, Tool Library Save/Load, Backplotter Speed Control, Macro Recorder Not Recording, Touch-Screen Mode)
+- **docs/quick-reference-card.md** — Added v3.0 Features Quick Reference table (10 entries), version bump to v3.0
+
+### Screenshots Updated
+- Captured 8 fresh dashboard screenshots with test program data loaded:
+  - `dashboard-gcode-viewer.png` (96KB) — with validation color-coding
+  - `dashboard-gcode-editor.png` (133KB) — with test code loaded
+  - `dashboard-backplotter.png` (152KB) — with toolpath rendered
+  - `dashboard-serial-terminal.png` (50KB) — empty terminal
+  - `dashboard-tool-library.png` (62KB) — with 8 tools imported from code
+  - `dashboard-file-diff.png` (110KB) — v1 vs v2 comparison
+  - `dashboard-reference-library.png` (181KB) — searchable library
+  - `dashboard-main.png` (96KB) — overview/viewer tab
+
+### Git
+- Feature commits: 24c78af, e4eea00, 2353e18, 909f9b5, e33310b
+- Documentation commit: f2df1e8
+- Pushed to origin/master
+
+---
+
 ## Current State Summary
 
 | Component | Status | Version | Details |
 |-----------|--------|---------|---------|
 | Post Processor | ✅ Complete | 1.0 | `anilam-crusader-m.cps` — Fusion 360 → Anilam RS-274 |
-| Desktop App | ✅ Complete | 2.1 | PyQt6 dashboard, 7 tabs, 17 new features in v2.1 |
+| Desktop App | ✅ Complete | 3.0 | PyQt6 dashboard, 7 tabs, dark/light theme, touch mode |
 | Reference Library | ✅ Complete | — | 228 entries, 25 categories, full-text search |
 | PDF Viewer | ✅ Complete | — | 18 documents, 472 pages, zoom + drag-to-pan |
 | ESP32 Firmware | ✅ Complete | 1.0 | Serial bridge, web server, WiFi AP mode |
+| Macro Recorder | ✅ Complete | 3.0 | Record/play/edit keystroke macros |
+| Program Library | ✅ Complete | 3.0 | Tag, search, organize G-code programs |
+| Comment Translator | ✅ Complete | 3.0 | EN/ES/FR auto-translation (200+ terms) |
 | Connection Tester | ✅ Complete | 2.1 | 8-step handshake/diagnostic test |
 | Error Logging | ✅ Complete | 2.1 | Rotating file logs + console output |
+| Test Programs | ✅ Complete | — | 2 multi-op programs (510 + 552 lines) |
 | Git/GitHub | ✅ Complete | — | Apocscode/CNC-Bridge (public) |
 
 ### Machine Configuration (Supermax-30 / Anilam Crusader M)
