@@ -8,6 +8,8 @@ UI panel for managing a persistent tool database.
   - Copy tool table to clipboard
 """
 
+import re
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView,
@@ -147,6 +149,14 @@ class ToolLibraryPanel(QGroupBox):
         self.copy_btn.clicked.connect(self._copy_table)
         toolbar.addWidget(self.copy_btn)
 
+        toolbar.addSpacing(10)
+
+        self.import_btn = QPushButton("Import from Code")
+        self.import_btn.setStyleSheet("QPushButton { background-color: #0078D4; color: white; font-weight: bold; }")
+        self.import_btn.setToolTip("Parse tools from G-code loaded in the Viewer or Editor")
+        self.import_btn.clicked.connect(self._import_from_code)
+        toolbar.addWidget(self.import_btn)
+
         toolbar.addStretch()
 
         self.count_label = QLabel("")
@@ -270,3 +280,148 @@ class ToolLibraryPanel(QGroupBox):
         clipboard = QApplication.clipboard()
         clipboard.setText(table_text)
         QMessageBox.information(self, "Copied", "Tool table copied to clipboard.")
+
+    # ── Import from Code ──────────────────────────────────────
+
+    def _import_from_code(self):
+        """Import tools by parsing G-code from the Viewer or Editor."""
+        gcode = self._get_gcode_text()
+        if not gcode:
+            QMessageBox.information(
+                self, "No Code",
+                "Load a G-code file in the Viewer or Editor first."
+            )
+            return
+
+        tools = self._parse_tools_from_gcode(gcode)
+        if not tools:
+            QMessageBox.information(
+                self, "No Tools Found",
+                "Could not find tool definitions in the loaded code.\n\n"
+                "Supported formats:\n"
+                "  • Tool comments:  (  T1 — 0.500 4FL END MILL)\n"
+                "  • T10xx table:  T1001 X0.5000 Z3.2500"
+            )
+            return
+
+        # Show summary and confirm
+        summary = "\n".join(
+            f"  T{t.number}: {t.description}  (Ø{t.diameter:.4f}\"  L{t.length:.4f}\")"
+            for t in tools
+        )
+        result = QMessageBox.question(
+            self, "Import Tools",
+            f"Found {len(tools)} tool(s):\n\n{summary}\n\n"
+            "Import into Tool Library?\n"
+            "(Existing tools with the same number will be updated.)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if result == QMessageBox.StandardButton.Yes:
+            for tool in tools:
+                self._settings.add_tool(tool)
+            self._refresh_table()
+            QMessageBox.information(
+                self, "Imported",
+                f"{len(tools)} tool(s) imported successfully."
+            )
+
+    def _get_gcode_text(self) -> str:
+        """Get G-code text from the Viewer or Editor via the main window."""
+        # Walk up to find the MainWindow and pull text
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, 'gcode_editor') and hasattr(parent, 'gcode_viewer'):
+                text = parent.gcode_editor.get_text()
+                if not text.strip():
+                    text = parent.gcode_viewer.get_text()
+                return text
+            parent = parent.parent()
+        return ""
+
+    @staticmethod
+    def _parse_tools_from_gcode(gcode: str) -> list:
+        """Parse tool entries from G-code text.
+
+        Handles two common Anilam formats:
+        1) Tool comments:  (  T1 — 0.500 4FL END MILL)
+           or              (  T12 - 0.250 DRILL)
+        2) T10xx table:    T1001 X0.5000 Z3.2500
+        """
+        tools_by_num: dict[int, ToolEntry] = {}
+
+        # --- Pass 1: Parse tool description comments ---
+        # Patterns like:  (  T1 — 0.500 4FL END MILL ROUGH)
+        #                 (  T12 - 0.250 DRILL)
+        #                 ( T3 -- 3/8 BALL END MILL)
+        comment_pat = re.compile(
+            r'\(\s*T(\d+)\s*'                           # T number
+            r'(?:[\x2d\u2014\u2013]+)\s*'               # dash/em-dash/en-dash
+            r'([\d./]+)?\s*'                            # optional diameter (decimal or fraction)
+            r'(.*?)\s*\)',                              # description
+            re.IGNORECASE
+        )
+        for m in comment_pat.finditer(gcode):
+            tool_num = int(m.group(1))
+            dia_str = m.group(2) or ""
+            desc = m.group(3).strip()
+
+            # Parse diameter (handle fractions like 1/4)
+            diameter = 0.0
+            if dia_str:
+                if '/' in dia_str:
+                    parts = dia_str.split('/')
+                    try:
+                        diameter = float(parts[0]) / float(parts[1])
+                    except (ValueError, ZeroDivisionError):
+                        pass
+                else:
+                    try:
+                        diameter = float(dia_str)
+                    except ValueError:
+                        pass
+
+            # Build description from diameter string + rest
+            full_desc = f"{dia_str} {desc}".strip() if dia_str else desc
+
+            tools_by_num[tool_num] = ToolEntry(
+                number=tool_num,
+                diameter=diameter,
+                description=full_desc,
+            )
+
+        # --- Pass 2: Parse T10xx table lines ---
+        # Pattern: T1001 X0.5000 Z3.2500
+        table_pat = re.compile(
+            r'^T(\d{4,5})\s+'
+            r'X([\d.]+)\s+'
+            r'Z([\d.]+)',
+            re.MULTILINE | re.IGNORECASE
+        )
+        for m in table_pat.finditer(gcode):
+            t_code = int(m.group(1))
+            x_val = float(m.group(2))
+            z_val = float(m.group(3))
+            tool_num = t_code - 1000  # T1001 → tool 1
+
+            if tool_num in tools_by_num:
+                # Update existing entry with precise diameter/length
+                tools_by_num[tool_num] = ToolEntry(
+                    number=tools_by_num[tool_num].number,
+                    diameter=x_val,
+                    length=z_val,
+                    description=tools_by_num[tool_num].description,
+                    material=tools_by_num[tool_num].material,
+                    flutes=tools_by_num[tool_num].flutes,
+                    max_rpm=tools_by_num[tool_num].max_rpm,
+                    max_feed=tools_by_num[tool_num].max_feed,
+                    notes=tools_by_num[tool_num].notes,
+                )
+            else:
+                tools_by_num[tool_num] = ToolEntry(
+                    number=tool_num,
+                    diameter=x_val,
+                    length=z_val,
+                )
+
+        # Return sorted by tool number
+        return sorted(tools_by_num.values(), key=lambda t: t.number)
