@@ -747,6 +747,7 @@ class GCodeViewerPanel(QGroupBox):
         summary = self.validator.get_summary()
         self.validation_output.setPlainText(summary)
         self._highlight_issues(issues)
+        self._highlight_validation_output()
 
     def _clear(self):
         """Clear the viewer display."""
@@ -803,6 +804,35 @@ class GCodeViewerPanel(QGroupBox):
             cursor.setPosition(block.position())
             cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor)
             cursor.setCharFormat(fmt)
+
+        cursor.endEditBlock()
+
+    def _highlight_validation_output(self):
+        """Color-code [ERROR] and [WARN] lines in the validation output pane."""
+        doc = self.validation_output.document()
+        cursor = QTextCursor(doc)
+        cursor.beginEditBlock()
+
+        block = doc.begin()
+        while block.isValid():
+            text = block.text()
+            fmt = QTextCharFormat()
+
+            if text.strip().startswith("[ERROR]"):
+                fmt.setBackground(QColor("#3a1e1e"))
+                fmt.setForeground(QColor("#F44336"))
+            elif text.strip().startswith("[WARN]"):
+                fmt.setBackground(QColor("#3a3a1e"))
+                fmt.setForeground(QColor("#DCDCAA"))
+            else:
+                block = block.next()
+                continue
+
+            cursor.setPosition(block.position())
+            cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock,
+                                QTextCursor.MoveMode.KeepAnchor)
+            cursor.setCharFormat(fmt)
+            block = block.next()
 
         cursor.endEditBlock()
 
