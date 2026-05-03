@@ -321,11 +321,6 @@ class SerialManager:
             return False
 
         try:
-            # Wait for XON if in XOFF state
-            if not self._xoff_event.wait(timeout=30.0):
-                self._set_error("Timeout waiting for XON from controller")
-                return False
-
             with self._lock:
                 if self.config.inter_char_delay > 0:
                     for byte in data:

@@ -843,6 +843,16 @@ class GCodeViewerPanel(QGroupBox):
 class MainWindow(QMainWindow):
     """CNC Bridge main application window."""
 
+    # Thread-safe signals for DNC callbacks (called from background thread)
+    _sig_transfer_progress = pyqtSignal(object)
+    _sig_transfer_complete = pyqtSignal(object)
+    _sig_transfer_error = pyqtSignal(str)
+    _sig_transfer_ack = pyqtSignal(str)
+    _sig_line_received = pyqtSignal(str)
+    _sig_connection_state = pyqtSignal(object)
+    _sig_serial_error = pyqtSignal(str)
+    _sig_flow_control = pyqtSignal(bool)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("CNC Bridge — Anilam Crusader M")
@@ -1169,16 +1179,25 @@ class MainWindow(QMainWindow):
         # Terminal
         self.terminal.send_command.connect(self._send_terminal_command)
 
-        # Serial callbacks (thread-safe via QTimer poll)
-        self.serial_mgr.on_line_received(self._on_serial_line)
-        self.serial_mgr.on_state_changed(self._on_connection_state)
-        self.serial_mgr.on_error(self._on_serial_error)
-        self.serial_mgr.on_flow_control(self._on_flow_control)
+        # Serial callbacks — route through Qt signals for thread safety
+        self.serial_mgr.on_line_received(lambda l: self._sig_line_received.emit(l))
+        self._sig_line_received.connect(self._on_serial_line)
+        self.serial_mgr.on_state_changed(lambda s: self._sig_connection_state.emit(s))
+        self._sig_connection_state.connect(self._on_connection_state)
+        self.serial_mgr.on_error(lambda m: self._sig_serial_error.emit(m))
+        self._sig_serial_error.connect(self._on_serial_error)
+        self.serial_mgr.on_flow_control(lambda x: self._sig_flow_control.emit(x))
+        self._sig_flow_control.connect(self._on_flow_control)
 
-        # DNC callbacks
-        self.dnc_engine.on_progress(self._on_transfer_progress)
-        self.dnc_engine.on_complete(self._on_transfer_complete)
-        self.dnc_engine.on_error(self._on_transfer_error)
+        # DNC callbacks — route through Qt signals for thread safety
+        self.dnc_engine.on_progress(lambda p: self._sig_transfer_progress.emit(p))
+        self.dnc_engine.on_complete(lambda p: self._sig_transfer_complete.emit(p))
+        self.dnc_engine.on_error(lambda m: self._sig_transfer_error.emit(m))
+        self.dnc_engine.on_ack(lambda m: self._sig_transfer_ack.emit(m))
+        self._sig_transfer_progress.connect(self._on_transfer_progress)
+        self._sig_transfer_complete.connect(self._on_transfer_complete)
+        self._sig_transfer_error.connect(self._on_transfer_error)
+        self._sig_transfer_ack.connect(self._on_transfer_ack)
 
         # Editor file-modified: auto-backplot
         self.gcode_editor.file_modified.connect(self._on_editor_saved)
@@ -1257,6 +1276,28 @@ class MainWindow(QMainWindow):
         self.settings.add_recent_file(filepath)
 
         send_mode = SendMode.DRIP_FEED if mode == "drip_feed" else SendMode.UPLOAD
+
+        # Warn if program may exceed controller memory
+        if send_mode == SendMode.UPLOAD:
+            try:
+                with open(filepath, 'r', encoding='ascii', errors='replace') as _f:
+                    line_count = sum(1 for _ in _f)
+                CONTROLLER_FREE_BLOCKS = 1301  # From AUX 1608 — update if memory changes
+                if line_count > CONTROLLER_FREE_BLOCKS:
+                    msg = (
+                        f"{Path(filepath).name} is {line_count} lines.\n\n"
+                        f"Controller memory has {CONTROLLER_FREE_BLOCKS} free blocks (1 block = 1 line).\n"
+                        f"This program exceeds available memory by {line_count - CONTROLLER_FREE_BLOCKS} lines.\n\n"
+                        f"Switch to Drip Feed mode instead?"
+                    )
+                    reply = QMessageBox.question(self, "Large Program Warning", msg,
+                                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    if reply == QMessageBox.StandardButton.Yes:
+                        send_mode = SendMode.DRIP_FEED
+                        mode = "drip_feed"
+            except Exception:
+                pass
+
         if self.dnc_engine.load_file(filepath):
             self.dnc_engine.send(send_mode)
             self.terminal.append_info(f"Sending {Path(filepath).name} ({mode})")
@@ -1307,34 +1348,32 @@ class MainWindow(QMainWindow):
     # --- Callbacks (may be called from background threads) ---
 
     def _on_serial_line(self, line: str):
-        # Thread-safe: use QTimer.singleShot to update GUI
-        QTimer.singleShot(0, lambda: self.terminal.append_received(line))
+        self.terminal.append_received(line)
         self.traffic_logger.log_rx(line)
 
     def _on_connection_state(self, state: ConnectionState):
-        QTimer.singleShot(0, lambda: self.monitor_panel.update_connection(state))
+        self.monitor_panel.update_connection(state)
 
     def _on_serial_error(self, message: str):
-        QTimer.singleShot(0, lambda: self.terminal.append_error(message))
-        QTimer.singleShot(0, lambda: self.statusBar().showMessage(f"Error: {message}"))
+        self.terminal.append_error(message)
+        self.statusBar().showMessage(f"Error: {message}")
         logging.getLogger("CNCBridge").error(f"Serial error: {message}")
         # Start auto-reconnect if enabled
         if self._auto_reconnect and self._last_config and not self._reconnect_timer.isActive():
-            QTimer.singleShot(0, lambda: self.terminal.append_info(
-                "Auto-reconnect will attempt in 5 seconds..."
-            ))
+            self.terminal.append_info("Auto-reconnect will attempt in 5 seconds...")
             self._reconnect_timer.start()
 
     def _on_flow_control(self, is_xon: bool):
-        QTimer.singleShot(0, lambda: self.monitor_panel.update_flow(is_xon))
+        self.monitor_panel.update_flow(is_xon)
 
     def _on_transfer_progress(self, progress: TransferProgress):
-        QTimer.singleShot(0, lambda: self.transfer_panel.update_progress(progress))
+        self.transfer_panel.update_progress(progress)
 
     def _on_transfer_complete(self, progress: TransferProgress):
-        QTimer.singleShot(0, lambda: self.terminal.append_info(
+        self.terminal.append_info(
             f"Transfer complete: {progress.current_line} lines in {progress.elapsed_time:.1f}s"
-        ))
+        )
+        self.transfer_panel.update_progress(progress)
         # Audible alert — success (two ascending beeps)
         try:
             winsound.Beep(800, 200)
@@ -1343,14 +1382,11 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_transfer_error(self, message: str):
-        QTimer.singleShot(0, lambda: self.terminal.append_error(f"Transfer error: {message}"))
-        # Audible alert — error (three low beeps)
-        try:
-            for _ in range(3):
-                winsound.Beep(400, 250)
-                time.sleep(0.1)
-        except Exception:
-            pass
+        self.terminal.append_error(f"Transfer error: {message}")
+
+    def _on_transfer_ack(self, message: str):
+        color = "#4CAF50" if "response" in message.lower() and "no response" not in message.lower() else "#FFC107"
+        self.terminal.append_text(f"  {message}", color)
 
     # --- Periodic Monitor Update ---
 

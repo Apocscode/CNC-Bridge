@@ -100,6 +100,7 @@ class DNCEngine:
         self._on_complete: Optional[Callable[[TransferProgress], None]] = None
         self._on_error: Optional[Callable[[str], None]] = None
         self._on_line_sent: Optional[Callable[[int, str], None]] = None
+        self._on_ack: Optional[Callable[[str], None]] = None
 
     # --- Properties ---
 
@@ -128,6 +129,10 @@ class DNCEngine:
 
     def on_line_sent(self, callback: Callable[[int, str], None]):
         self._on_line_sent = callback
+
+    def on_ack(self, callback: Callable[[str], None]):
+        """Register a callback for controller acknowledgment after transfer."""
+        self._on_ack = callback
 
     # --- File Loading ---
 
@@ -302,6 +307,7 @@ class DNCEngine:
     def _send_loop(self):
         """Main send loop — runs in background thread."""
         try:
+            logger.info(f"_send_loop started: {len(self._lines)} lines, mode={self._progress.mode}")
             for i, line in enumerate(self._lines):
                 # Check abort
                 if self._abort_flag:
@@ -355,6 +361,9 @@ class DNCEngine:
             if self._on_complete:
                 self._on_complete(self._progress)
 
+            # Listen for controller acknowledgment (up to 3 seconds)
+            self._wait_for_ack(timeout=3.0)
+
             logger.info(
                 f"Transfer complete: {self._progress.current_line} lines, "
                 f"{self._progress.bytes_sent} bytes in {self._progress.elapsed_time:.1f}s"
@@ -364,6 +373,35 @@ class DNCEngine:
             self._report_error(f"Send error: {e}")
 
     # --- Internal Helpers ---
+
+    def _wait_for_ack(self, timeout: float = 3.0):
+        """Listen for any response bytes from the controller after transfer."""
+        try:
+            ser = self._serial._serial
+            if not ser or not ser.is_open:
+                return
+            deadline = time.time() + timeout
+            buf = b''
+            while time.time() < deadline:
+                waiting = ser.in_waiting
+                if waiting > 0:
+                    buf += ser.read(waiting)
+                    # Reset deadline on new data
+                    deadline = time.time() + 1.0
+                else:
+                    time.sleep(0.05)
+            if buf and self._on_ack:
+                text = buf.decode('ascii', errors='replace').strip()
+                if text:
+                    self._on_ack(f"Controller response: {repr(text)}")
+                else:
+                    # Control chars only (e.g. XON 0x11)
+                    hex_str = ' '.join(f'0x{b:02X}' for b in buf)
+                    self._on_ack(f"Controller ACK: {hex_str}")
+            elif self._on_ack:
+                self._on_ack("No response from controller (normal for Anilam store mode)")
+        except Exception as e:
+            logger.debug(f"ACK listen error: {e}")
 
     def _notify_progress(self):
         if self._on_progress:

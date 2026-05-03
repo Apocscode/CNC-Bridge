@@ -1,0 +1,16 @@
+%
+(CNC BRIDGE RS232 TEST - SAFE AIR RUN)
+(NO CUTTING - SPINDLE TEST ONLY)
+(ENSURE TOOL IS CLEAR OF WORK BEFORE RUNNING)
+N10 G70             (Inch mode)
+N20 G90             (Absolute positioning)
+N30 G00 X0 Y0 Z1.0  (Rapid to safe home)
+N40 T1001 M06       (Tool 1 call)
+N50 M1000           (Look-ahead ON)
+N60 S500 M03        (Spindle CW 500 RPM)
+N70 G00 X0 Y0 Z1.0  (Hold position - air run)
+N80 M05             (Spindle off)
+N90 M2000           (Look-ahead OFF)
+N100 G00 X0 Y0 Z1.0 (Return to home)
+N110 M02            (End program)
+%
